@@ -62,3 +62,14 @@ def append_trade_log(row: dict[str, Any]) -> None:
         if not exists:
             w.writeheader()
         w.writerow({k: row.get(k, "") for k in TRADE_LOG_HEADER})
+
+
+def append_trade_log_to(path: str, row: dict[str, Any]) -> None:
+    """Append a row to an arbitrary CSV log; header inferred from the first row's keys."""
+    ensure_dirs()
+    exists = os.path.exists(path)
+    with open(path, "a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not exists:
+            w.writeheader()
+        w.writerow(row)

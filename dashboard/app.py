@@ -190,11 +190,39 @@ def mandates_table(mandates):
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
 
+def prediction_panel():
+    """Prediction-market mode view (if it has been run)."""
+    pf = store.read_json(config.PRED_PORTFOLIO_FILE, {})
+    mandates = store.read_json(config.PRED_MANDATES_FILE, [])
+    if not pf and not mandates:
+        return
+    st.divider()
+    st.subheader("🎲 Prediction markets (Polymarket)")
+    eq = pf.get("equity", config.PRED_INITIAL_BALANCE)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pred equity", f"${eq:,.2f}", f"{(eq/config.PRED_INITIAL_BALANCE-1)*100:+.2f}%")
+    c2.metric("Closed", pf.get("closed_trades", 0))
+    c3.metric("Open", len(pf.get("open_positions", [])))
+    if mandates:
+        rows = [{
+            "market": m["market"][:60], "yes": m.get("yes_price"),
+            "est": m.get("est_prob"), "edge": m.get("edge"),
+            "action": m.get("action"), "decision": m.get("vault", {}).get("decision"),
+        } for m in mandates[-12:]]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+
 def main():
     with st.sidebar:
         st.header("Controls")
         st.caption(f"Provider: **{config.LLM_PROVIDER}**")
-        st.caption(f"Symbol: **{config.SYMBOL}** · TF: **{config.LOOP_TIMEFRAME}**")
+        st.caption(f"Basket: **{', '.join(config.SYMBOL_ALLOWLIST)}**")
+        st.caption(f"TF: **{config.LOOP_TIMEFRAME}** · Leverage: **{config.LEVERAGE}x**")
+        profile = store.read_json(config.PROFILE_FILE, {})
+        if profile.get("overrides"):
+            st.markdown("**🎚️ Vibe profile**")
+            st.caption(profile.get("source", ""))
+            st.json(profile["overrides"], expanded=False)
         if st.button("🔄 Refresh"):
             st.rerun()
         auto = st.checkbox("Auto-refresh (5s)", value=False)
@@ -215,6 +243,7 @@ def main():
     evolution_log(evo)
     mandates_table(mandates)
     trade_log()
+    prediction_panel()
 
     if auto:
         import time

@@ -1,0 +1,135 @@
+[
+  {
+    "mandate_id": "PM-2026-06-20-0001",
+    "timestamp": "2026-06-20T22:36:59.970333+00:00",
+    "market": "Map 2: Odd/Even Total Kills?",
+    "market_id": "1920386",
+    "yes_price": 0.5,
+    "est_prob": 0.5,
+    "edge": 0.0,
+    "side": "NO",
+    "action": "NO_TRADE",
+    "confidence": 0.15,
+    "thesis": "The parity of total kills in a standard competitive match is mathematically a coin flip with no structural bias, aligning perfectly with the market's 50% pricing.",
+    "counterargument": "Rare edge cases like round limits, overtime mechanics, or environmental deaths could introduce a microscopic parity skew, though it remains statistically unexploitable.",
+    "vault": {
+      "decision": "REJECTED",
+      "reason": "edge +0.00 vs threshold 0.08"
+    },
+    "equity": 10000.0
+  },
+  {
+    "mandate_id": "PM-2026-06-20-0002",
+    "timestamp": "2026-06-20T22:37:55.349215+00:00",
+    "market": "UFC Fight Night: Kyoji Horiguchi vs. Manel Kape (Flyweight, Main Card)",
+    "market_id": "2397615",
+    "yes_price": 0.395,
+    "est_prob": 0.41,
+    "edge": 0.015,
+    "side": "YES",
+    "action": "NO_TRADE",
+    "confidence": 0.75,
+    "thesis": "MMA betting markets are highly efficient, and pre-fight closing lines accurately priced Horiguchi's win probability around 40-42% given the striking vs grappling stylistic split.",
+    "counterargument": "Horiguchi's elite BJJ and high fight IQ introduce significant variance that could easily push his true win probability above the market's implied 40%.",
+    "vault": {
+      "decision": "REJECTED",
+      "reason": "edge +0.01 vs threshold 0.08"
+    },
+    "equity": 10000.0
+  },
+  {
+    "mandate_id": "PM-2026-06-20-0003",
+    "timestamp": "2026-06-20T22:38:44.852755+00:00",
+    "market": "Will Google have the best Math AI model at the end of July 2026?",
+    "market_id": "2431050",
+    "yes_price": 0.5,
+    "est_prob": 0.4,
+    "edge": -0.1,
+    "side": "NO",
+    "action": "NO_TRADE",
+    "confidence": 0.3,
+    "thesis": "While Google DeepMind's specialized math research is elite, holding the absolute top benchmark spot in a hyper-competitive oligopoly is statistically difficult.",
+    "counterargument": "Google's massive compute advantage and dedicated formal reasoning pipelines could easily allow them to outpace OpenAI and Anthropic by mid-2026.",
+    "vault": {
+      "decision": "REJECTED",
+      "reason": "edge -0.10 vs threshold 0.08"
+    },
+    "equity": 10000.0
+  },
+  {
+    "mandate_id": "PM-2026-06-20-0004",
+    "timestamp": "2026-06-20T22:39:18.844709+00:00",
+    "market": "Will the Republicans win the Florida governor race in 2026?",
+    "market_id": "629325",
+    "yes_price": 0.775,
+    "est_prob": 0.86,
+    "edge": 0.085,
+    "side": "YES",
+    "action": "BUY_YES",
+    "confidence": 0.6,
+    "thesis": "Florida's entrenched R+6 partisan lean and recent 20-point Republican gubernatorial margins make the GOP heavy favorites to hold the governorship in this open-seat race.",
+    "counterargument": "A severe national Democratic wave in the 2026 midterms, combined with a high-profile moderate challenger, could overcome the state's structural Republican advantage.",
+    "vault": {
+      "decision": "APPROVED",
+      "reason": "edge +0.08 vs threshold 0.08"
+    },
+    "equity": 10000.0
+  },
+  {
+    "mandate_id": "PM-2026-06-20-0005",
+    "timestamp": "2026-06-20T22:40:01.664650+00:00",
+    "market": "Will the SpaceX Starship launch from Florida by August 31, 2026?",
+    "market_id": "2584972",
+    "yes_price": 0.075,
+    "est_prob": 0.3,
+    "edge": 0.225,
+    "side": "YES",
+    "action": "BUY_YES",
+    "confidence": 0.6,
+    "thesis": "Active pad construction at LC-39A and advancing FAA reviews make a 2025-2026 maiden Florida launch highly feasible, indicating the market likely underprices SpaceX's execution speed.",
+    "counterargument": "Protracted FAA environmental reviews and potential prioritization of Texas test flights could delay regulatory approval and pad readiness past the August 2026 deadline.",
+    "vault": {
+      "decision": "APPROVED",
+      "reason": "edge +0.22 vs threshold 0.08"
+    },
+    "equity": 10000.0
+  },
+  {
+    "mandate_id": "PM-2026-06-20-0006",
+    "timestamp": "2026-06-20T22:40:51.757328+00:00",
+    "market": "Will the highest temperature in Hong Kong be 33\u00b0C on June 21?",
+    "market_id": "2603571",
+    "yes_price": 0.35,
+    "est_prob": 0.34,
+    "edge": -0.01,
+    "side": "NO",
+    "action": "NO_TRADE",
+    "confidence": 0.6,
+    "thesis": "Late June in Hong Kong climatologically favors highs near 32-33\u00b0C, making the market's 35% pricing well-calibrated to historical base rates.",
+    "counterargument": "Unpredictable summer monsoon showers or tropical cloud bands could easily cap the temperature at 31\u00b0C or push it to 34\u00b0C, missing the specific target.",
+    "vault": {
+      "decision": "REJECTED",
+      "reason": "edge -0.01 vs threshold 0.08"
+    },
+    "equity": 10000.0
+  },
+  {
+    "mandate_id": "PM-2026-06-20-0007",
+    "timestamp": "2026-06-20T22:41:26.895628+00:00",
+    "market": "Cura\u00e7ao leading at halftime?",
+    "market_id": "2322943",
+    "yes_price": 0.059,
+    "est_prob": 0.06,
+    "edge": 0.001,
+    "side": "YES",
+    "action": "NO_TRADE",
+    "confidence": 0.5,
+    "thesis": "Lacking specific opponent context, the market's 6% pricing accurately reflects the standard low base rate for a CONCACAF underdog to lead at halftime.",
+    "counterargument": "Unaccounted lineup changes or extreme early-game variance could easily shift the true probability away from this tight market estimate.",
+    "vault": {
+      "decision": "REJECTED",
+      "reason": "edge +0.00 vs threshold 0.08"
+    },
+    "equity": 10000.0
+  }
+]

@@ -163,18 +163,34 @@ def _reset_state() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="VesperClaw autonomous paper-trading agent")
-    parser.add_argument("--mode", choices=["live_paper", "fast_demo"], default=config.RUN_MODE)
+    parser.add_argument("--mode", choices=["live_paper", "fast_demo", "prediction"],
+                        default=config.RUN_MODE)
     parser.add_argument("--symbols", type=str, default=None,
                         help="comma-separated basket (default: SYMBOL_ALLOWLIST)")
     parser.add_argument("--cycles", type=int, default=None, help="max cycles")
     parser.add_argument("--reset", action="store_true", help="wipe state before running")
     parser.add_argument("--demo-data", action="store_true", help="use synthetic candles offline")
+    parser.add_argument("--vibe", type=str, default=None,
+                        help='set a natural-language trading style, e.g. "aggressive trend follower, BTC+ETH, 3x"')
     args = parser.parse_args()
 
     if args.demo_data:
         config.DEMO_DATA = True
     if args.reset:
         _reset_state()
+
+    # Natural-language "vibe" overrides: compile a new one, else apply any saved profile.
+    from vesperclaw import vibe
+    if args.vibe:
+        vibe.set_vibe(args.vibe)
+    else:
+        vibe.apply_profile(vibe.load_profile())
+
+    # Prediction-market mode is a self-contained second instrument class.
+    if args.mode == "prediction":
+        from vesperclaw import prediction
+        prediction.run(cycles=args.cycles, interval=config.LOOP_INTERVAL_SECONDS)
+        return
 
     symbols = [s.strip() for s in args.symbols.split(",")] if args.symbols else config.SYMBOL_ALLOWLIST
 

@@ -159,27 +159,42 @@ Runs 24/7 on a Linux VPS via two `systemd` services (loop + dashboard). See [`DE
 
 ---
 
+## Run modes
+
+```bash
+python main.py --mode fast_demo        # replay real 1m candles fast (judge demo)
+python main.py --mode live_paper       # 15m live basket scan, 24/7
+python main.py --mode prediction       # prediction markets (Polymarket read feed)
+python main.py --vibe "aggressive trend follower, BTC+ETH only, 3x leverage"
+```
+
+## Instrument & perception breadth (shipped)
+
+Beyond the multi-asset spot agent, VesperClaw now spans:
+
+- **Perpetuals with funding-aware leverage** — leverage applied to notional,
+  funding cost accrued per held bar, liquidation backstop, and extreme funding
+  fades the crowded side. (`USE_PERPS`, `LEVERAGE`)
+- **Portfolio-level risk** — AgentVault caps *aggregate same-direction exposure*
+  across the correlated basket and downsizes to fit remaining room — a portfolio
+  risk manager, not just a per-trade gate.
+- **On-chain macro signal** — DeFiLlama total-TVL 7-day trend as a risk-on/off
+  proxy that nudges directional bias (keyless).
+- **Prediction markets** — a **Probability Agent** (Qwen) estimates true odds for
+  live Polymarket questions and trades the gap vs. the market-implied price;
+  paper-only (read feed, no wallet), probability-move + timeout exits, full audit
+  trail. Reuses the same mandate → risk-gate → paper → log skeleton.
+- **Natural-language vibe trading** — describe a style in English; Qwen compiles it
+  into *validated, range-clamped* config overrides (it can tune the agent, not
+  bypass its risk limits).
+
 ## Roadmap (room to grow)
 
-VesperClaw's skeleton — Signal Mandate, AgentVault, paper execution + audit log,
-and the evolution engine — is **instrument-agnostic**, so new markets plug into the
-same explainable, risk-gated loop. Planned next:
-
-- **Perpetuals with funding-aware leverage** — the snapshot already pulls funding
-  rate and open interest; the next step is leverage, funding cost in PnL, and
-  funding-extreme avoidance.
-- **Portfolio-level risk** — correlation-aware sizing and a portfolio drawdown cap,
-  elevating AgentVault from per-trade to portfolio risk manager.
-- **On-chain signals** — whale flows / DeFi TVL / ETF flows as additional perception
-  inputs (pending reliable free data sources).
-- **Prediction markets** — a Probability Agent that reads a market's question + news
-  to estimate true odds and trade the gap vs. the market-implied price (e.g.
-  Polymarket read feed; paper-only, so no wallet needed). The mandate → vault →
-  paper → evolution skeleton transfers directly; only the perception/strategy layer
-  is new. Probability-move exits keep the close-based learning loop fast.
-
-These are deliberately scoped as future work — the shipped MVP is the multi-asset,
-sentiment-aware spot agent above.
+- Live (real-capital) execution toggle behind an explicit opt-in.
+- Deeper on-chain perception (whale flows, ETF/stablecoin flows) once reliable
+  free feeds are wired.
+- Per-regime evolution extended to the prediction-market and perps strategies.
+- Correlation-matrix-based sizing (currently same-direction aggregate cap).
 
 ## Safety
 

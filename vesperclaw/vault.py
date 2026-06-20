@@ -102,7 +102,21 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
         else:
             reasons.append(f"max open positions ({open_count}/{config.MAX_OPEN_POSITIONS}) reached")
 
-    # 9. cooldown (soft -> DELAYED rather than REJECTED)
+    # 9. portfolio exposure — correlated basket, same-direction positions add up
+    direction = "long" if mandate.action == "LONG" else "short"
+    positions = portfolio.get("open_positions", [])
+    same_dir_exposure = sum(
+        p.get("size_pct", 0) for p in positions if p.get("direction") == direction
+    )
+    exposure_room = config.MAX_PORTFOLIO_EXPOSURE_PCT - same_dir_exposure
+    checks["portfolio_exposure_ok"] = exposure_room > 0.001
+    if not checks["portfolio_exposure_ok"]:
+        reasons.append(
+            f"portfolio {direction} exposure cap reached "
+            f"({same_dir_exposure:.0%}/{config.MAX_PORTFOLIO_EXPOSURE_PCT:.0%})"
+        )
+
+    # 10. cooldown (soft -> DELAYED rather than REJECTED)
     cycle = portfolio.get("cycle", 0)
     cooldown_until = portfolio.get("cooldown_until_cycle", 0)
     cooldown_active = cycle < cooldown_until
@@ -112,7 +126,8 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
     hard_fail = not all(
         checks[k] for k in (
             "paper_mode", "allowlisted_symbol", "confidence_floor",
-            "volatility_ok", "min_rr", "daily_loss_ok", "drawdown_ok", "positions_ok",
+            "volatility_ok", "min_rr", "daily_loss_ok", "drawdown_ok",
+            "positions_ok", "portfolio_exposure_ok",
         )
     )
 
@@ -130,12 +145,14 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
             f"cooldown active until cycle {cooldown_until}", checks,
         )
 
-    # size cap -> possible downsize
-    approved = min(req, config.MAX_POSITION_SIZE_PCT)
+    # size cap -> possible downsize (per-trade cap AND remaining portfolio room)
+    approved = min(req, config.MAX_POSITION_SIZE_PCT, exposure_room)
     if approved < req - 1e-9:
+        capped_by = "portfolio exposure room" if exposure_room <= config.MAX_POSITION_SIZE_PCT \
+            else f"max {config.MAX_POSITION_SIZE_PCT:.0%}"
         decision = VaultDecision(
             mandate.mandate_id, "APPROVED_DOWNSIZED", True, req, round(approved, 4),
-            f"size reduced from {req:.2%} to {approved:.2%} (max {config.MAX_POSITION_SIZE_PCT:.0%})",
+            f"size reduced from {req:.2%} to {approved:.2%} ({capped_by})",
             checks,
         )
         _record_vault_save(mandate, decision, downsized=True)

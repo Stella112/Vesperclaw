@@ -1,22 +1,7 @@
 [
   {
-    "mandate_id": "VC-2026-06-20-0079",
-    "timestamp": "2026-06-20T21:58:23.994912+00:00",
-    "symbol": "BTC/USDT",
-    "direction": "short",
-    "entry_price": 63647.3,
-    "stop_loss": 63677.32,
-    "take_profit": 63597.28,
-    "decision": "REJECTED",
-    "downsized": false,
-    "reason": "already holding BTC/USDT",
-    "resolved": true,
-    "would_be_pnl_pct": -0.055,
-    "verdict": "good_block"
-  },
-  {
-    "mandate_id": "VC-2026-06-20-0785",
-    "timestamp": "2026-06-20T22:00:02.490463+00:00",
+    "mandate_id": "VC-2026-06-20-0626",
+    "timestamp": "2026-06-20T22:53:16.156842+00:00",
     "symbol": "ETH/USDT",
     "direction": "long",
     "entry_price": 1728.43,

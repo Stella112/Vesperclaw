@@ -45,6 +45,13 @@ INITIAL_BALANCE = float(os.getenv("INITIAL_BALANCE", "10000"))
 RISK_PER_TRADE = float(os.getenv("RISK_PER_TRADE", "0.01"))
 TAKER_FEE = float(os.getenv("TAKER_FEE", "0.0006"))  # 0.06% Bitget taker
 
+# Perpetuals: leverage applies to notional (size_pct is the margin fraction).
+# LEVERAGE=1 keeps spot-like behaviour. Funding cost accrues per held bar.
+USE_PERPS = os.getenv("USE_PERPS", "true").lower() == "true"
+LEVERAGE = float(os.getenv("LEVERAGE", "2")) if USE_PERPS else 1.0
+FUNDING_INTERVAL_BARS = float(os.getenv("FUNDING_INTERVAL_BARS", "32"))  # ~8h in 15m bars
+EXTREME_FUNDING = float(os.getenv("EXTREME_FUNDING", "0.0005"))  # per-interval, ~crowded
+
 # Run mode
 RUN_MODE = os.getenv("RUN_MODE", "fast_demo").lower()  # "live_paper" | "fast_demo"
 DEMO_DATA = os.getenv("DEMO_DATA", "false").lower() == "true"
@@ -86,6 +93,9 @@ MAX_DAILY_LOSS_PCT = 0.05      # halt new trades after -5% day
 MAX_DRAWDOWN_PCT = 0.20        # lockdown after -20% from peak
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))   # portfolio-wide cap
 MAX_POSITIONS_PER_SYMBOL = 1   # at most one open position per symbol
+# Portfolio-level: the basket (BTC/ETH/SOL) is highly correlated, so same-direction
+# positions add up as one risk. Cap aggregate same-direction notional exposure.
+MAX_PORTFOLIO_EXPOSURE_PCT = float(os.getenv("MAX_PORTFOLIO_EXPOSURE_PCT", "0.18"))
 DANGER_VOLATILITY_PCT = 5.0    # ATR as % of price -> Risk Agent veto
 COOLDOWN_BARS = 4
 MIN_RR = 1.5                   # minimum risk/reward ratio
@@ -106,6 +116,17 @@ REGIMES = ["trend_up", "trend_down", "range", "uncertain"]
 
 
 # ── Storage ───────────────────────────────────────────────────────────
+# ── Prediction markets (#6) ───────────────────────────────────────────
+PRED_EDGE_THRESHOLD = float(os.getenv("PRED_EDGE_THRESHOLD", "0.08"))  # min |est-market| to trade
+PRED_MAX_POSITIONS = int(os.getenv("PRED_MAX_POSITIONS", "3"))
+PRED_SIZE_PCT = float(os.getenv("PRED_SIZE_PCT", "0.05"))
+PRED_STOP_BAND = float(os.getenv("PRED_STOP_BAND", "0.06"))   # YES-price stop distance
+PRED_TIMEOUT_BARS = int(os.getenv("PRED_TIMEOUT_BARS", "10"))
+PRED_INITIAL_BALANCE = float(os.getenv("PRED_INITIAL_BALANCE", "10000"))
+PRED_MARKETS = int(os.getenv("PRED_MARKETS", "8"))            # markets scanned per cycle
+
+
+# ── Storage ───────────────────────────────────────────────────────────
 DATA_DIR = os.getenv("DATA_DIR", "data")
 PORTFOLIO_FILE = f"{DATA_DIR}/portfolio.json"
 MANDATES_FILE = f"{DATA_DIR}/mandates.json"
@@ -114,3 +135,8 @@ EVOLUTION_FILE = f"{DATA_DIR}/evolution.json"
 WEIGHTS_FILE = f"{DATA_DIR}/weights.json"
 VAULT_SAVES_FILE = f"{DATA_DIR}/vault_saves.json"
 TRADE_LOG_CSV = f"{DATA_DIR}/trade_log.csv"
+PROFILE_FILE = f"{DATA_DIR}/profile.json"   # natural-language "vibe" overrides
+# prediction-market state (kept separate from the crypto loop)
+PRED_PORTFOLIO_FILE = f"{DATA_DIR}/pred_portfolio.json"
+PRED_MANDATES_FILE = f"{DATA_DIR}/pred_mandates.json"
+PRED_TRADE_LOG_CSV = f"{DATA_DIR}/pred_trade_log.csv"

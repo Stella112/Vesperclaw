@@ -241,6 +241,28 @@ def _sentiment_opinion(snap: Snapshot, direction: str | None) -> tuple[AgentOpin
         elif direction == "short" and bias >= 0.4:
             mult *= 0.85; vote = "oppose"; notes.append("bullish news flow against short")
 
+    # funding (perps): extreme funding = crowded side; fade the crowd
+    fr = snap.funding_rate
+    if fr is not None and abs(fr) >= config.EXTREME_FUNDING:
+        notes.append(f"funding {fr:+.4%}")
+        if direction == "long" and fr > 0:
+            mult *= 0.85; vote = "oppose"; notes.append("crowded longs (high funding) — caution")
+        elif direction == "short" and fr < 0:
+            mult *= 0.85; vote = "oppose"; notes.append("crowded shorts (negative funding) — caution")
+
+    # on-chain macro: capital flowing in (risk_on) supports longs, out supports shorts
+    ocr = snap.onchain_regime
+    if ocr:
+        notes.append(f"on-chain {ocr} (TVL 7d {snap.defi_tvl_change_7d:+}%)")
+        if direction == "long" and ocr == "risk_on":
+            mult *= 1.05; notes.append("TVL inflows support long")
+        elif direction == "short" and ocr == "risk_off":
+            mult *= 1.05; notes.append("TVL outflows support short")
+        elif direction == "long" and ocr == "risk_off":
+            mult *= 0.90; notes.append("TVL outflows against long")
+        elif direction == "short" and ocr == "risk_on":
+            mult *= 0.90; notes.append("TVL inflows against short")
+
     if not notes:
         notes.append("no sentiment/news data")
 

@@ -37,6 +37,9 @@ class Position:
     entry_time: str
     regime: str
     leading_agent: str | None
+    leverage: float = 1.0
+    margin: float = 0.0
+    funding_rate: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -144,10 +147,12 @@ class PaperEngine:
     def open_position(self, mandate: Mandate, vault: VaultDecision, price: float) -> Position:
         self.update_price(mandate.symbol, price)
         size_pct = vault.approved_size_pct
-        notional = self.state["equity"] * size_pct
+        margin = self.state["equity"] * size_pct          # capital at risk
+        notional = margin * config.LEVERAGE               # leveraged exposure
         qty = notional / price if price else 0.0
         fee = notional * config.TAKER_FEE
         direction = "long" if mandate.action == "LONG" else "short"
+        funding_rate = (mandate.snapshot or {}).get("funding_rate") or 0.0
 
         bal_before = self.state["balance"]
         self.state["balance"] = round(bal_before - fee, 2)
@@ -164,6 +169,9 @@ class PaperEngine:
             take_profit=mandate.take_profit,
             entry_cycle=self.state["cycle"],
             entry_time=_now(),
+            leverage=config.LEVERAGE,
+            margin=round(margin, 2),
+            funding_rate=float(funding_rate),
             regime=mandate.regime,
             leading_agent=mandate.leading_agent,
         )
@@ -202,6 +210,11 @@ class PaperEngine:
 
     def _exit_reason(self, p: Position, price: float) -> str | None:
         bars_held = self.state["cycle"] - p.entry_cycle
+        # leverage liquidation: loss eats ~90% of posted margin
+        loss = (p.entry_price - price) * p.quantity if p.direction == "long" \
+            else (price - p.entry_price) * p.quantity
+        if p.margin and loss >= p.margin * 0.9:
+            return "liquidation"
         if p.direction == "long":
             if price <= p.stop_loss:
                 return "stop_loss"
@@ -222,7 +235,13 @@ class PaperEngine:
         else:
             gross = (p.entry_price - price) * p.quantity
         exit_fee = (p.quantity * price) * config.TAKER_FEE
-        net = gross - exit_fee
+
+        # funding cost: longs pay when funding>0, shorts receive (and vice versa)
+        bars_held = self.state["cycle"] - p.entry_cycle
+        funding_payment = p.notional * p.funding_rate * (bars_held / config.FUNDING_INTERVAL_BARS)
+        funding_cost = funding_payment if p.direction == "long" else -funding_payment
+
+        net = gross - exit_fee - funding_cost
 
         self.update_price(p.symbol, price)
         bal_before = self.state["balance"]
@@ -236,13 +255,16 @@ class PaperEngine:
         # cooldown after each close
         self.state["cooldown_until_cycle"] = self.state["cycle"] + config.COOLDOWN_BARS
 
-        pnl_pct = (net / p.notional * 100) if p.notional else 0.0
+        # return on margin (leveraged), falls back to notional for legacy positions
+        basis = p.margin or p.notional
+        pnl_pct = (net / basis * 100) if basis else 0.0
         record = {
             "mandate_id": p.mandate_id, "symbol": p.symbol, "direction": p.direction,
             "entry_price": p.entry_price, "exit_price": price, "quantity": p.quantity,
-            "notional": p.notional, "pnl": round(net, 2), "pnl_pct": round(pnl_pct, 3),
+            "notional": p.notional, "leverage": p.leverage, "funding_cost": round(funding_cost, 4),
+            "pnl": round(net, 2), "pnl_pct": round(pnl_pct, 3),
             "reason": reason, "regime": p.regime, "leading_agent": p.leading_agent,
-            "bars_held": self.state["cycle"] - p.entry_cycle, "win": win,
+            "bars_held": bars_held, "win": win,
             "entry_time": p.entry_time, "exit_time": _now(),
         }
         store.append_trade_log({

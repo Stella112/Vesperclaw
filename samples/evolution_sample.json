@@ -1,13 +1,13 @@
 [
   {
-    "timestamp": "2026-06-20T22:00:51.110385+00:00",
+    "timestamp": "2026-06-20T22:55:03.510512+00:00",
     "regime": "uncertain",
     "agent": "trend_agent",
     "samples": 5,
-    "win_rate": 0.2,
-    "avg_pnl_pct": -0.105,
+    "win_rate": 0.4,
+    "avg_pnl_pct": -0.129,
     "old_weight": 0.35,
-    "new_weight": 0.3299,
-    "reason": "trend_agent won 20% of its last 5 trades in uncertain; weight cut 0.350->0.330."
+    "new_weight": 0.3434,
+    "reason": "trend_agent won 40% of its last 5 trades in uncertain; weight cut 0.350->0.343."
   }
 ]

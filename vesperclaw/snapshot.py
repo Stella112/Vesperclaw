@@ -60,6 +60,9 @@ class Snapshot:
     news_count: int = 0
     news_bias: float = 0.0
     headlines: list[str] = field(default_factory=list)
+    # on-chain (macro risk-on/off proxy; None if unavailable)
+    defi_tvl_change_7d: float | None = None
+    onchain_regime: str | None = None
     # raw signal flags computed deterministically (ground truth for agents)
     signals: dict[str, Any] = field(default_factory=dict)
 
@@ -293,6 +296,7 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
     # Only fetch live microstructure in true live mode (no replay window, real feed).
     micro = {"funding_rate": None, "open_interest": None, "long_short_ratio": None}
     senti = {"fear_greed": None, "fg_class": None, "news_count": 0, "news_bias": 0.0, "headlines": []}
+    onchain = {"defi_tvl_change_7d": None, "onchain_regime": None}
     if is_live:
         try:
             micro = _fetch_microstructure(symbol)
@@ -304,6 +308,11 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
                 senti = get_sentiment(symbol)
             except Exception:  # noqa: BLE001
                 pass
+        try:
+            from vesperclaw.onchain import get_onchain
+            onchain = get_onchain()
+        except Exception:  # noqa: BLE001
+            pass
 
     return Snapshot(
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -335,6 +344,8 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
         news_count=senti.get("news_count", 0),
         news_bias=senti.get("news_bias", 0.0),
         headlines=senti.get("headlines", []),
+        defi_tvl_change_7d=onchain.get("defi_tvl_change_7d"),
+        onchain_regime=onchain.get("onchain_regime"),
         signals=signals,
     )
 

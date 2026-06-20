@@ -7,10 +7,12 @@ running anything.
 
 | File | What it shows |
 |---|---|
-| [`trade_log.csv`](trade_log.csv) | **Required artifact.** Every paper fill (open + close): timestamp, pair, direction, price, quantity, fee, balance before/after, PnL, regime, vault decision, linked mandate id. |
+| [`trade_log.csv`](trade_log.csv) | **Required artifact.** Multi-asset (BTC/ETH/SOL) paper fills: timestamp, pair, direction, price, quantity, fee, balance before/after, PnL, regime, vault decision, linked mandate id. |
 | [`sample_qwen_mandate.json`](sample_qwen_mandate.json) | One full **Qwen-powered Signal Mandate** — thesis, the adversarial **counterargument**, per-agent votes with distinct reasoning, SL/TP, R:R, and invalidation condition. |
 | [`vault_saves_sample.json`](vault_saves_sample.json) | Trades the AgentVault firewall blocked/downsized, later reconciled as `good_block` / `bad_block`. |
 | [`evolution_sample.json`](evolution_sample.json) | Close-based, per-regime weight changes with human-readable reasons. |
+| [`pred_trade_log.csv`](pred_trade_log.csv) | **Prediction-market** paper trades on live Polymarket markets (Probability Agent vs market-implied odds). |
+| [`pred_mandates_sample.json`](pred_mandates_sample.json) | Prediction-market decisions: question, market price, Qwen's estimated probability, the edge, and the trade/refusal. |
 
 ## Notes for reviewers
 
