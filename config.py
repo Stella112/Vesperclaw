@@ -27,10 +27,19 @@ BITGET_SECRET_KEY = os.getenv("BITGET_SECRET_KEY", "")
 BITGET_PASSPHRASE = os.getenv("BITGET_PASSPHRASE", "")
 PLAYBOOK_API_KEY = os.getenv("PLAYBOOK_API_KEY", "")
 
+# Sentiment & news (Fear & Greed is keyless; CryptoPanic token is optional)
+CRYPTOPANIC_TOKEN = os.getenv("CRYPTOPANIC_TOKEN", "")
+USE_SENTIMENT = os.getenv("USE_SENTIMENT", "true").lower() == "true"
+
 
 # ── Trading config ────────────────────────────────────────────────────
 SYMBOL = os.getenv("SYMBOL", "BTC/USDT")
-SYMBOL_ALLOWLIST = [s.strip() for s in os.getenv("SYMBOL_ALLOWLIST", SYMBOL).split(",")]
+# Multi-asset basket the agent scans each cycle. Defaults to a 3-coin basket;
+# override with SYMBOL_ALLOWLIST="BTC/USDT,ETH/USDT" etc. Always includes SYMBOL.
+_allow_default = "BTC/USDT,ETH/USDT,SOL/USDT"
+SYMBOL_ALLOWLIST = [s.strip() for s in os.getenv("SYMBOL_ALLOWLIST", _allow_default).split(",") if s.strip()]
+if SYMBOL not in SYMBOL_ALLOWLIST:
+    SYMBOL_ALLOWLIST.insert(0, SYMBOL)
 TIMEFRAME = os.getenv("TIMEFRAME", "15m")
 INITIAL_BALANCE = float(os.getenv("INITIAL_BALANCE", "10000"))
 RISK_PER_TRADE = float(os.getenv("RISK_PER_TRADE", "0.01"))
@@ -75,7 +84,8 @@ MAX_POSITION_SIZE_PCT = 0.10   # max 10% of equity notional per trade
 MIN_CONFIDENCE = 0.55
 MAX_DAILY_LOSS_PCT = 0.05      # halt new trades after -5% day
 MAX_DRAWDOWN_PCT = 0.20        # lockdown after -20% from peak
-MAX_OPEN_POSITIONS = 1
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))   # portfolio-wide cap
+MAX_POSITIONS_PER_SYMBOL = 1   # at most one open position per symbol
 DANGER_VOLATILITY_PCT = 5.0    # ATR as % of price -> Risk Agent veto
 COOLDOWN_BARS = 4
 MIN_RR = 1.5                   # minimum risk/reward ratio

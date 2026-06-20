@@ -1,20 +1,22 @@
-"""VesperClaw orchestrator — the autonomous loop.
+"""VesperClaw orchestrator — the autonomous loop (multi-asset).
 
-Wires every component into one cycle:
+Each cycle the agent scans every symbol in the basket (SYMBOL_ALLOWLIST):
 
-    snapshot -> regime referee -> council (debate) -> mandate
-        -> AgentVault -> paper execution -> close (TP/SL/timeout) -> evolution
+    for each symbol:
+        snapshot -> regime referee -> council (debate) -> mandate
+            -> AgentVault (per-symbol + portfolio limits) -> paper execution
+    then: resolve exits, reconcile vault saves, mark portfolio, evolve
 
 Run modes:
-    live_paper  : one cycle every LOOP_INTERVAL_SECONDS using the latest candle.
-    fast_demo   : replay 1-minute candles quickly so a full loop (entries, exits,
-                  evolution, vault saves) is visible in a 2-3 minute demo.
+    live_paper  : one full basket scan every LOOP_INTERVAL_SECONDS (15m candles).
+    fast_demo   : replay 1-minute candles quickly across the basket so a full loop
+                  (entries, exits, evolution, vault saves) is visible in minutes.
 
 Usage:
-    python main.py                      # uses RUN_MODE from .env
-    python main.py --mode fast_demo --cycles 300
+    python main.py --mode fast_demo --reset
     python main.py --mode live_paper
-    python main.py --reset              # wipe state and start fresh
+    python main.py --symbols BTC/USDT,ETH/USDT
+    python main.py --reset
 """
 from __future__ import annotations
 
@@ -37,80 +39,98 @@ from vesperclaw.vault import evaluate as vault_evaluate
 MIN_WINDOW = max(config.BB_PERIOD, config.EMA_SLOW, config.ATR_PERIOD) + 5
 
 
-def run_cycle(engine: PaperEngine, df_window: pd.DataFrame | None = None) -> dict[str, Any]:
-    """Execute a single autonomous cycle and persist all artifacts."""
-    snap = build_snapshot(df=df_window)
-    engine.begin_cycle(snap.price)
+def run_cycle(engine: PaperEngine, symbols: list[str],
+              frame_map: dict[str, pd.DataFrame] | None = None) -> list[dict[str, Any]]:
+    """Execute one autonomous cycle across the whole basket."""
+    engine.begin_cycle()  # advance cycle + daily rollover; prices marked after scan
+    price_map: dict[str, float] = {}
+    records: list[dict[str, Any]] = []
+    actions: list[str] = []
 
-    # 1. resolve open trades first (so capital/positions free up before new entries)
-    for closed in engine.check_exits(snap.price):
-        evolution.update_from_close(closed)
-    evolution.reconcile_vault_saves(snap.price)
+    for sym in symbols:
+        df = frame_map.get(sym) if frame_map else None
+        snap = build_snapshot(symbol=sym, df=df)
+        price_map[sym] = snap.price
+        engine.update_price(sym, snap.price)
 
-    # 2. council reasons with the learned weights for THIS regime
-    weights = evolution.weights_for(snap.regime)
-    council = run_council(snap, weights)
+        # resolve this symbol's open trades before considering a new entry
+        for closed in engine.check_exits(snap.price, symbol=sym):
+            evolution.update_from_close(closed)
 
-    # 3. build the mandate (recorded even when it's a NO_TRADE / refusal)
-    seq = engine.next_seq()
-    mandate = build_mandate(snap, council, seq)
+        weights = evolution.weights_for(snap.regime)
+        council = run_council(snap, weights)
+        seq = engine.next_seq()
+        mandate = build_mandate(snap, council, seq)
 
-    # 4. firewall + execution
-    vault = vault_evaluate(mandate, engine.portfolio_view())
-    if vault.execution_allowed:
-        engine.open_position(mandate, vault, snap.price)
+        vault = vault_evaluate(mandate, engine.portfolio_view(symbol=sym))
+        if vault.execution_allowed:
+            engine.open_position(mandate, vault, snap.price)
 
-    # 5. persist the full decision record for the audit trail / dashboard
-    record = mandate.to_dict()
-    record["vault"] = vault.to_dict()
-    record["equity"] = engine.state["equity"]
-    store.append_json_list(config.MANDATES_FILE, record, cap=1000)
+        record = mandate.to_dict()
+        record["vault"] = vault.to_dict()
+        record["equity"] = engine.state["equity"]
+        store.append_json_list(config.MANDATES_FILE, record, cap=1500)
+        records.append(record)
+        if mandate.action != "NO_TRADE":
+            actions.append(f"{sym.split('/')[0]}:{mandate.action}/{vault.decision}")
+
+    # portfolio-level housekeeping
+    evolution.reconcile_vault_saves(price_map)
+    engine.mark_prices(price_map)
     engine.save()
 
     logger.info(
-        f"cycle {engine.state['cycle']} | regime={snap.regime} "
-        f"action={mandate.action} vault={vault.decision} "
-        f"equity={engine.state['equity']}"
+        f"cycle {engine.state['cycle']} | "
+        f"{', '.join(actions) if actions else 'no entries'} | "
+        f"open={len(engine.state['open_positions'])} equity={engine.state['equity']}"
     )
-    return record
+    return records
 
 
-def _replay_frames(symbol: str) -> list[pd.DataFrame]:
-    """Build a list of sliding candle windows for fast-demo replay."""
+# ── fast-demo replay ────────────────────────────────────────────────────
+
+def _symbol_series(symbol: str) -> pd.DataFrame:
     from vesperclaw.snapshot import _fetch_ohlcv, _synthetic_ohlcv
 
     if config.DEMO_DATA:
-        df = _synthetic_ohlcv(limit=800, seed=7)
-    else:
-        try:
-            df = _fetch_ohlcv(symbol, "1m", limit=1000)
-            logger.info(f"Replaying {len(df)} live 1m candles from Bitget.")
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Live fetch failed ({e}); using synthetic candles.")
-            df = _synthetic_ohlcv(limit=800, seed=7)
-
-    frames = []
-    for end in range(MIN_WINDOW, len(df)):
-        frames.append(df.iloc[:end].reset_index(drop=True))
-    return frames
+        return _synthetic_ohlcv(limit=800, seed=abs(hash(symbol)) % 9999)
+    try:
+        df = _fetch_ohlcv(symbol, "1m", limit=1000)
+        logger.info(f"{symbol}: replaying {len(df)} live 1m candles.")
+        return df
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"{symbol}: live fetch failed ({e}); using synthetic candles.")
+        return _synthetic_ohlcv(limit=800, seed=abs(hash(symbol)) % 9999)
 
 
-def run_fast_demo(engine: PaperEngine, max_cycles: int | None) -> None:
-    frames = _replay_frames(config.SYMBOL)
+def _replay_frame_maps(symbols: list[str]) -> list[dict[str, pd.DataFrame]]:
+    """Build per-cycle {symbol: window} maps, aligned to the shortest series."""
+    series = {s: _symbol_series(s) for s in symbols}
+    n = min(len(df) for df in series.values())
+    frame_maps: list[dict[str, pd.DataFrame]] = []
+    for end in range(MIN_WINDOW, n):
+        frame_maps.append({s: series[s].iloc[:end].reset_index(drop=True) for s in symbols})
+    return frame_maps
+
+
+def run_fast_demo(engine: PaperEngine, symbols: list[str], max_cycles: int | None) -> None:
+    frame_maps = _replay_frame_maps(symbols)
     if max_cycles:
-        frames = frames[:max_cycles]
-    logger.info(f"FAST_DEMO: replaying {len(frames)} cycles (interval {config.LOOP_INTERVAL_SECONDS}s)")
-    for frame in frames:
-        run_cycle(engine, df_window=frame)
+        frame_maps = frame_maps[:max_cycles]
+    logger.info(f"FAST_DEMO: {len(frame_maps)} cycles over {len(symbols)} symbols "
+                f"(interval {config.LOOP_INTERVAL_SECONDS}s)")
+    for fm in frame_maps:
+        run_cycle(engine, symbols, fm)
         time.sleep(config.LOOP_INTERVAL_SECONDS)
     _print_summary(engine)
 
 
-def run_live_paper(engine: PaperEngine, max_cycles: int | None) -> None:
-    logger.info(f"LIVE_PAPER: cycle every {config.LOOP_INTERVAL_SECONDS}s on {config.LOOP_TIMEFRAME}")
+def run_live_paper(engine: PaperEngine, symbols: list[str], max_cycles: int | None) -> None:
+    logger.info(f"LIVE_PAPER: basket {symbols} every {config.LOOP_INTERVAL_SECONDS}s "
+                f"on {config.LOOP_TIMEFRAME}")
     count = 0
     while True:
-        run_cycle(engine)
+        run_cycle(engine, symbols)
         count += 1
         if max_cycles and count >= max_cycles:
             break
@@ -144,7 +164,9 @@ def _reset_state() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="VesperClaw autonomous paper-trading agent")
     parser.add_argument("--mode", choices=["live_paper", "fast_demo"], default=config.RUN_MODE)
-    parser.add_argument("--cycles", type=int, default=None, help="max cycles (default: unlimited/all)")
+    parser.add_argument("--symbols", type=str, default=None,
+                        help="comma-separated basket (default: SYMBOL_ALLOWLIST)")
+    parser.add_argument("--cycles", type=int, default=None, help="max cycles")
     parser.add_argument("--reset", action="store_true", help="wipe state before running")
     parser.add_argument("--demo-data", action="store_true", help="use synthetic candles offline")
     args = parser.parse_args()
@@ -154,15 +176,17 @@ def main() -> None:
     if args.reset:
         _reset_state()
 
+    symbols = [s.strip() for s in args.symbols.split(",")] if args.symbols else config.SYMBOL_ALLOWLIST
+
     store.ensure_dirs()
     engine = PaperEngine()
-    logger.info(f"VesperClaw starting | provider={config.LLM_PROVIDER} symbol={config.SYMBOL} "
+    logger.info(f"VesperClaw starting | provider={config.LLM_PROVIDER} basket={symbols} "
                 f"mode={args.mode} demo_data={config.DEMO_DATA}")
 
     if args.mode == "fast_demo":
-        run_fast_demo(engine, args.cycles)
+        run_fast_demo(engine, symbols, args.cycles)
     else:
-        run_live_paper(engine, args.cycles)
+        run_live_paper(engine, symbols, args.cycles)
 
 
 if __name__ == "__main__":

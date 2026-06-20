@@ -24,17 +24,26 @@ The headline isn't the P&L. It's the **audit trail**: you can replay every decis
 ## The loop
 
 ```
-Bitget market data
-  → Market Snapshot        (ADX, EMA, RSI, Bollinger, ATR + funding/OI if available)
+Bitget market data (multi-asset basket: BTC, ETH, SOL, …)
+  → Market Snapshot        (ADX, EMA, RSI, Bollinger, ATR + funding/OI
+                            + Fear&Greed / news sentiment)
   → Regime Referee         (ADX decides which strategy may lead)
-  → Qwen Analyst Council   (Trend / Mean-Reversion / Risk / Allocator + adversarial debate)
+  → Qwen Analyst Council   (Trend / Mean-Reversion / Risk / Sentiment / Allocator
+                            + adversarial debate)
   → Signal Mandate         (action, confidence, SL/TP, thesis, counterargument, votes)
-  → AgentVault             (APPROVED / DOWNSIZED / REJECTED / DELAYED)
+  → AgentVault             (APPROVED / DOWNSIZED / REJECTED / DELAYED;
+                            per-symbol + portfolio-wide limits)
   → Paper Execution        (simulated fills + CSV trade log)
   → Close (TP / SL / timeout)
   → Evolution Engine       (per-regime weight learning, close-based)
-  → next cycle
+  → next cycle (scans the whole basket)
 ```
+
+The agent **scans a basket of symbols every cycle**, detects each one's regime
+independently, and can hold concurrent positions across assets under a
+portfolio-wide risk cap. Perception fuses price, positioning (funding/OI), and
+**crowd sentiment** (Fear & Greed, optional CryptoPanic news) — the Sentiment
+agent applies contrarian caution (e.g. it won't chase shorts into Extreme Fear).
 
 ### Regime referee
 | ADX | Regime | Leading strategy |
@@ -56,6 +65,8 @@ Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR
 - **Vault Saves** — when the firewall blocks/shrinks a trade, it later checks whether that block actually avoided a loss (`good_block` vs `bad_block`).
 - **Close-based, per-regime learning** — weights update only when a trade *closes*, learned independently per regime, with sample minimums, capped steps, and a weight floor so noise can't whipsaw the system.
 - **Deterministic ground truth + LLM judgment** — Python computes the entry signal (verifiable, reproducible); Qwen supplies confidence and the narrative. If the LLM is unavailable, the loop degrades to heuristics and keeps running.
+- **Multi-asset market scan** — every cycle the agent evaluates a basket (BTC, ETH, SOL, …), each with its own regime, holding concurrent positions under a portfolio-wide cap.
+- **Sentiment-aware perception** — fuses Fear & Greed and (optional) news flow with price/positioning; the Sentiment agent applies contrarian caution at crowd extremes.
 
 ---
 
@@ -129,10 +140,11 @@ main.py                   # orchestrator loop (live_paper + fast_demo)
 vesperclaw/
   llm_client.py           # Qwen/Claude provider-agnostic client
   snapshot.py             # market snapshot + ADX regime referee
-  agents.py               # analyst council + adversarial debate
+  sentiment.py            # Fear & Greed + CryptoPanic news perception
+  agents.py               # analyst council (incl. sentiment) + adversarial debate
   mandate.py              # Signal Mandate assembler
   vault.py                # AgentVault risk firewall + Vault Saves
-  paper_engine.py         # paper execution + CSV trade log
+  paper_engine.py         # multi-asset paper execution + CSV trade log
   evolution.py            # close-based per-regime learning
   store.py                # JSON/CSV persistence
 dashboard/app.py          # Streamlit glass-box dashboard
@@ -147,9 +159,31 @@ Runs 24/7 on a Linux VPS via two `systemd` services (loop + dashboard). See [`DE
 
 ---
 
+## Roadmap (room to grow)
+
+VesperClaw's skeleton — Signal Mandate, AgentVault, paper execution + audit log,
+and the evolution engine — is **instrument-agnostic**, so new markets plug into the
+same explainable, risk-gated loop. Planned next:
+
+- **Perpetuals with funding-aware leverage** — the snapshot already pulls funding
+  rate and open interest; the next step is leverage, funding cost in PnL, and
+  funding-extreme avoidance.
+- **Portfolio-level risk** — correlation-aware sizing and a portfolio drawdown cap,
+  elevating AgentVault from per-trade to portfolio risk manager.
+- **On-chain signals** — whale flows / DeFi TVL / ETF flows as additional perception
+  inputs (pending reliable free data sources).
+- **Prediction markets** — a Probability Agent that reads a market's question + news
+  to estimate true odds and trade the gap vs. the market-implied price (e.g.
+  Polymarket read feed; paper-only, so no wallet needed). The mandate → vault →
+  paper → evolution skeleton transfers directly; only the perception/strategy layer
+  is new. Probability-move exits keep the close-based learning loop fast.
+
+These are deliberately scoped as future work — the shipped MVP is the multi-asset,
+sentiment-aware spot agent above.
+
 ## Safety
 
-Paper-mode locked by default · no real capital · symbol allowlist · size/drawdown/daily-loss limits · cooldowns · volatility veto · complete logged audit trail of every action and refusal.
+Paper-mode locked by default · no real capital · symbol allowlist · per-symbol & portfolio position caps · size/drawdown/daily-loss limits · cooldowns · volatility veto · complete logged audit trail of every action and refusal.
 
 ---
 

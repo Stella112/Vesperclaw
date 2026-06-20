@@ -62,6 +62,7 @@ class PaperEngine:
             "cooldown_until_cycle": 0,
             "mandate_seq": 0,
             "open_positions": [],
+            "last_prices": {},
             "closed_trades": 0,
             "wins": 0,
             "losses": 0,
@@ -83,43 +84,65 @@ class PaperEngine:
     def positions(self) -> list[Position]:
         return [Position(**p) for p in self.state["open_positions"]]
 
-    def portfolio_view(self) -> dict[str, Any]:
-        """What the vault needs to make a decision."""
+    def portfolio_view(self, symbol: str | None = None) -> dict[str, Any]:
+        """What the vault needs to make a decision (optionally per-symbol)."""
+        positions = self.state["open_positions"]
         return {
             "balance": self.state["balance"],
             "equity": self.state["equity"],
             "peak_equity": self.state["peak_equity"],
             "day_start_equity": self.state["day_start_equity"],
-            "open_positions": self.state["open_positions"],
+            "open_positions": positions,
+            "symbol_open_count": sum(1 for p in positions if p.get("symbol") == symbol),
             "cycle": self.state["cycle"],
             "cooldown_until_cycle": self.state["cooldown_until_cycle"],
         }
 
     # ── lifecycle ──
-    def begin_cycle(self, price: float) -> None:
+    def begin_cycle(self, price: float | None = None) -> None:
+        """Advance the cycle counter + handle daily rollover.
+
+        In single-asset use pass `price` to also mark-to-market. In multi-asset
+        use, call this once with no price, then `mark_prices(price_map)` after
+        processing every symbol.
+        """
         self.state["cycle"] += 1
-        # daily rollover
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if today != self.state["day"]:
             self.state["day"] = today
             self.state["day_start_equity"] = self.state["equity"]
-        self._mark_to_market(price)
+        if price is not None:
+            self._mark_to_market(price)
 
-    def _unrealized(self, price: float) -> float:
+    def _recompute_equity(self) -> None:
+        """Equity = cash balance + unrealized PnL, each position priced by the
+        last seen price for its own symbol (state['last_prices'])."""
+        last = self.state.setdefault("last_prices", {})
         pnl = 0.0
         for p in self.positions:
-            if p.direction == "long":
-                pnl += (price - p.entry_price) * p.quantity
-            else:
-                pnl += (p.entry_price - price) * p.quantity
-        return pnl
+            px = last.get(p.symbol, p.entry_price)
+            pnl += (px - p.entry_price) * p.quantity if p.direction == "long" \
+                else (p.entry_price - px) * p.quantity
+        self.state["equity"] = round(self.state["balance"] + pnl, 2)
+        self.state["peak_equity"] = round(max(self.state["peak_equity"], self.state["equity"]), 2)
+
+    def update_price(self, symbol: str, price: float) -> None:
+        """Record the latest price for a symbol (used before exits/sizing)."""
+        self.state.setdefault("last_prices", {})[symbol] = price
+
+    def mark_prices(self, price_map: dict[str, float]) -> None:
+        """Mark the whole portfolio to market using a {symbol: price} map."""
+        for sym, px in price_map.items():
+            self.state.setdefault("last_prices", {})[sym] = px
+        self._recompute_equity()
 
     def _mark_to_market(self, price: float) -> None:
-        self.state["equity"] = round(self.state["balance"] + self._unrealized(price), 2)
-        self.state["peak_equity"] = round(max(self.state["peak_equity"], self.state["equity"]), 2)
+        """Single-symbol convenience mark (single-asset path / open / close)."""
+        self._recompute_equity()
 
     # ── execution ──
     def open_position(self, mandate: Mandate, vault: VaultDecision, price: float) -> Position:
+        self.update_price(mandate.symbol, price)
         size_pct = vault.approved_size_pct
         notional = self.state["equity"] * size_pct
         qty = notional / price if price else 0.0
@@ -157,12 +180,18 @@ class PaperEngine:
         logger.info(f"OPEN {direction} {pos.symbol} @ {price} size {size_pct:.2%} ({pos.mandate_id})")
         return pos
 
-    def check_exits(self, price: float) -> list[dict[str, Any]]:
-        """Close positions hitting TP/SL/timeout. Returns closed-trade records."""
+    def check_exits(self, price: float, symbol: str | None = None) -> list[dict[str, Any]]:
+        """Close positions hitting TP/SL/timeout. If `symbol` is given, only that
+        symbol's positions are evaluated (at `price`); others are left untouched."""
+        if symbol is not None:
+            self.update_price(symbol, price)
         closed: list[dict[str, Any]] = []
         survivors: list[dict[str, Any]] = []
         for pd in self.state["open_positions"]:
             p = Position(**pd)
+            if symbol is not None and p.symbol != symbol:
+                survivors.append(pd)
+                continue
             reason = self._exit_reason(p, price)
             if reason is None:
                 survivors.append(pd)
@@ -195,6 +224,7 @@ class PaperEngine:
         exit_fee = (p.quantity * price) * config.TAKER_FEE
         net = gross - exit_fee
 
+        self.update_price(p.symbol, price)
         bal_before = self.state["balance"]
         self.state["balance"] = round(bal_before + net, 2)
         self._mark_to_market(price)

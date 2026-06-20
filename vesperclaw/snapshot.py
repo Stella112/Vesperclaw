@@ -54,6 +54,12 @@ class Snapshot:
     funding_rate: float | None = None
     long_short_ratio: float | None = None
     open_interest: float | None = None
+    # sentiment & news (optional; None/0 if unavailable)
+    fear_greed: int | None = None
+    fg_class: str | None = None
+    news_count: int = 0
+    news_bias: float = 0.0
+    headlines: list[str] = field(default_factory=list)
     # raw signal flags computed deterministically (ground truth for agents)
     signals: dict[str, Any] = field(default_factory=dict)
 
@@ -234,6 +240,11 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
     symbol = symbol or config.SYMBOL
     timeframe = timeframe or config.LOOP_TIMEFRAME
 
+    # Live mode = we fetch the latest candles ourselves (no caller-supplied window,
+    # not synthetic). Only then do we pull live microstructure + sentiment. Captured
+    # here because `df` is reassigned below.
+    is_live = df is None and not config.DEMO_DATA
+
     if df is None:
         if config.DEMO_DATA:
             df = _synthetic_ohlcv()
@@ -281,11 +292,18 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
 
     # Only fetch live microstructure in true live mode (no replay window, real feed).
     micro = {"funding_rate": None, "open_interest": None, "long_short_ratio": None}
-    if df is None and not config.DEMO_DATA:
+    senti = {"fear_greed": None, "fg_class": None, "news_count": 0, "news_bias": 0.0, "headlines": []}
+    if is_live:
         try:
             micro = _fetch_microstructure(symbol)
         except Exception:  # noqa: BLE001
             pass
+        if config.USE_SENTIMENT:
+            try:
+                from vesperclaw.sentiment import get_sentiment
+                senti = get_sentiment(symbol)
+            except Exception:  # noqa: BLE001
+                pass
 
     return Snapshot(
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -312,6 +330,11 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
         funding_rate=micro.get("funding_rate"),
         long_short_ratio=micro.get("long_short_ratio"),
         open_interest=micro.get("open_interest"),
+        fear_greed=senti.get("fear_greed"),
+        fg_class=senti.get("fg_class"),
+        news_count=senti.get("news_count", 0),
+        news_bias=senti.get("news_bias", 0.0),
+        headlines=senti.get("headlines", []),
         signals=signals,
     )
 

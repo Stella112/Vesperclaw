@@ -113,16 +113,17 @@ def update_from_close(trade: dict[str, Any]) -> dict[str, Any] | None:
     return entry
 
 
-def reconcile_vault_saves(price: float) -> int:
-    """Resolve pending Vault Saves against the current price.
+def reconcile_vault_saves(price: float | dict[str, float]) -> int:
+    """Resolve pending Vault Saves against current price(s).
 
-    A blocked trade is a 'good_block' if price has moved against its intended
-    direction past the stop, 'bad_block' if it reached the target. Returns the
-    number newly resolved.
+    Pass a float (single-asset) or a {symbol: price} map (multi-asset). A blocked
+    trade is a 'good_block' if price moved against its intended direction past the
+    stop, 'bad_block' if it reached the target. Returns the number newly resolved.
     """
     saves = store.read_json(config.VAULT_SAVES_FILE, [])
     if not isinstance(saves, list):
         return 0
+    price_map = price if isinstance(price, dict) else None
     resolved = 0
     for sv in saves:
         if sv.get("resolved"):
@@ -132,19 +133,25 @@ def reconcile_vault_saves(price: float) -> int:
         sl, tp = sv.get("stop_loss"), sv.get("take_profit")
         if entry is None or direction not in ("long", "short"):
             continue
+        if price_map is not None:
+            cur = price_map.get(sv.get("symbol"))
+            if cur is None:
+                continue
+        else:
+            cur = price
         verdict = None
         if direction == "long":
-            if sl is not None and price <= sl:
+            if sl is not None and cur <= sl:
                 verdict = "good_block"
-            elif tp is not None and price >= tp:
+            elif tp is not None and cur >= tp:
                 verdict = "bad_block"
-            wb_pnl = (price - entry) / entry * 100
+            wb_pnl = (cur - entry) / entry * 100
         else:
-            if sl is not None and price >= sl:
+            if sl is not None and cur >= sl:
                 verdict = "good_block"
-            elif tp is not None and price <= tp:
+            elif tp is not None and cur <= tp:
                 verdict = "bad_block"
-            wb_pnl = (entry - price) / entry * 100
+            wb_pnl = (entry - cur) / entry * 100
         if verdict:
             sv["resolved"] = True
             sv["verdict"] = verdict

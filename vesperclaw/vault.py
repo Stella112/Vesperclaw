@@ -89,11 +89,18 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
     if not checks["drawdown_ok"]:
         reasons.append(f"max drawdown breached ({drawdown:.2%}) — lockdown")
 
-    # 8. max open positions
+    # 8. position limits — portfolio-wide and per-symbol
     open_count = len(portfolio.get("open_positions", []))
-    checks["positions_ok"] = open_count < config.MAX_OPEN_POSITIONS
+    sym_count = portfolio.get("symbol_open_count", 0)
+    checks["positions_ok"] = (
+        open_count < config.MAX_OPEN_POSITIONS
+        and sym_count < config.MAX_POSITIONS_PER_SYMBOL
+    )
     if not checks["positions_ok"]:
-        reasons.append(f"max open positions ({open_count}) reached")
+        if sym_count >= config.MAX_POSITIONS_PER_SYMBOL:
+            reasons.append(f"already holding {mandate.symbol}")
+        else:
+            reasons.append(f"max open positions ({open_count}/{config.MAX_OPEN_POSITIONS}) reached")
 
     # 9. cooldown (soft -> DELAYED rather than REJECTED)
     cycle = portfolio.get("cycle", 0)

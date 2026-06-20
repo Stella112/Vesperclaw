@@ -59,6 +59,28 @@ def header(portfolio):
     c5.metric("Cycle", portfolio.get("cycle", 0))
 
 
+def basket_panel(mandates):
+    """Latest decision per symbol — the multi-asset scan at a glance."""
+    if not mandates:
+        return
+    latest_by_symbol: dict[str, dict] = {}
+    for m in mandates:
+        latest_by_symbol[m["symbol"]] = m
+    st.subheader("Basket scan (latest per symbol)")
+    rows = []
+    for sym, m in latest_by_symbol.items():
+        v = m.get("vault", {})
+        rows.append({
+            "symbol": sym,
+            "regime": f"{REGIME_COLORS.get(m['regime'],'')} {m['regime']}",
+            "action": f"{ACTION_COLORS.get(m['action'],'')} {m['action']}",
+            "conf": m["confidence"],
+            "vault": f"{VAULT_COLORS.get(v.get('decision',''),'')} {v.get('decision','—')}",
+            "price": m.get("entry_price"),
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+
 def latest_decision(mandates):
     if not mandates:
         st.info("No cycles recorded yet. Start the loop:  `python main.py --mode fast_demo`")
@@ -104,7 +126,13 @@ def latest_decision(mandates):
             "price": snap.get("price"), "ADX": snap.get("adx"),
             "RSI": snap.get("rsi"), "ATR%": snap.get("atr_pct"),
             "EMA_fast": snap.get("ema_fast"), "EMA_slow": snap.get("ema_slow"),
+            "Fear&Greed": f"{snap.get('fear_greed')} ({snap.get('fg_class')})"
+            if snap.get("fear_greed") is not None else "n/a",
+            "funding_rate": snap.get("funding_rate"),
+            "news": f"{snap.get('news_count', 0)} (bias {snap.get('news_bias', 0)})",
         }, expanded=False)
+        if snap.get("headlines"):
+            st.caption("📰 " + " · ".join(snap["headlines"][:3]))
 
 
 def equity_curve(mandates):
@@ -173,6 +201,8 @@ def main():
 
     portfolio, mandates, orders, evo, saves = load_all()
     header(portfolio)
+    st.divider()
+    basket_panel(mandates)
     st.divider()
     latest_decision(mandates)
     st.divider()

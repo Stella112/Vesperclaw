@@ -206,6 +206,54 @@ def _allocator_size(confidence: float, risk_veto: bool) -> tuple[float, AgentOpi
     return round(size, 4), op
 
 
+def _sentiment_opinion(snap: Snapshot, direction: str | None) -> tuple[AgentOpinion, float]:
+    """Deterministic sentiment/news read. Returns (opinion, confidence_multiplier).
+
+    Uses Fear & Greed contrarian logic + news bias. Crowd euphoria cautions longs,
+    capitulation cautions shorts; news strongly against the trade also cautions.
+    No LLM call here — keeps the loop cheap and the logic auditable.
+    """
+    fg = snap.fear_greed
+    bias = snap.news_bias  # [-1, 1], + = bullish news
+    notes: list[str] = []
+    mult = 1.0
+    vote = "neutral"
+
+    if fg is not None:
+        notes.append(f"Fear&Greed {fg} ({snap.fg_class})")
+        if direction == "long" and fg >= 75:
+            mult *= 0.80; vote = "oppose"
+            notes.append("extreme greed — contrarian caution on longs")
+        elif direction == "short" and fg <= 25:
+            mult *= 0.80; vote = "oppose"
+            notes.append("extreme fear — contrarian caution on shorts")
+        elif direction == "long" and fg <= 25:
+            mult *= 1.05; vote = "approve"
+            notes.append("fear supports contrarian long")
+        elif direction == "short" and fg >= 75:
+            mult *= 1.05; vote = "approve"
+            notes.append("greed supports contrarian short")
+
+    if snap.news_count:
+        notes.append(f"{snap.news_count} headlines, bias {bias:+.2f}")
+        if direction == "long" and bias <= -0.4:
+            mult *= 0.85; vote = "oppose"; notes.append("bearish news flow against long")
+        elif direction == "short" and bias >= 0.4:
+            mult *= 0.85; vote = "oppose"; notes.append("bullish news flow against short")
+
+    if not notes:
+        notes.append("no sentiment/news data")
+
+    op = AgentOpinion(
+        name="sentiment_agent",
+        vote=vote,
+        direction=None,
+        confidence=round(min(1.0, max(0.0, mult)), 3),
+        rationale="; ".join(notes),
+    )
+    return op, mult
+
+
 # ── council orchestration with adversarial debate ────────────────────────
 
 def run_council(snap: Snapshot, weights: dict[str, float] | None = None) -> CouncilResult:
@@ -243,6 +291,11 @@ def run_council(snap: Snapshot, weights: dict[str, float] | None = None) -> Coun
     opinions.append(risk)
     risk_veto = risk.vote == "oppose" or snap.high_volatility
 
+    # 2b. Sentiment & news read — tempers confidence (contrarian F&G + news bias).
+    sentiment, senti_mult = _sentiment_opinion(snap, direction)
+    opinions.append(sentiment)
+    confidence = round(max(0.0, min(1.0, confidence * senti_mult)), 3)
+
     # 3. Uncertain regime needs a higher confidence bar.
     min_conf = config.MIN_CONFIDENCE + (
         config.UNCERTAIN_CONFIDENCE_BONUS if snap.regime == "uncertain" else 0.0
@@ -257,11 +310,13 @@ def run_council(snap: Snapshot, weights: dict[str, float] | None = None) -> Coun
     # 5. Thesis + adversarial counterargument.
     if direction:
         thesis = lead.rationale
-        # strongest counter = opposing agent's view or risk agent's caution
-        counterargument = (
-            risk.rationale if risk_veto
-            else (opposing.rationale or "Opposing strategy sees no edge here.")
-        )
+        # strongest counter = risk veto > sentiment caution > opposing strategy
+        if risk_veto:
+            counterargument = risk.rationale
+        elif sentiment.vote == "oppose":
+            counterargument = f"Sentiment caution — {sentiment.rationale}."
+        else:
+            counterargument = opposing.rationale or "Opposing strategy sees no edge here."
     else:
         thesis = "No trade: regime/confidence/risk conditions not met."
         counterargument = "Standing aside has opportunity cost if the move runs."
