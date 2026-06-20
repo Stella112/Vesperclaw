@@ -1,0 +1,59 @@
+{
+  "mandate_id": "VC-2026-06-20-0001",
+  "timestamp": "2026-06-20T21:10:56.590769+00:00",
+  "symbol": "BTC/USDT",
+  "mode": "paper",
+  "action": "LONG",
+  "regime": "trend_up",
+  "regime_confidence": 0.709,
+  "confidence": 0.637,
+  "requested_size_pct": 0.0637,
+  "entry_type": "market",
+  "entry_price": 73445.0,
+  "stop_loss": 73150.24,
+  "take_profit": 73936.27,
+  "stop_loss_pct": 0.401,
+  "take_profit_pct": 0.669,
+  "rr": 1.67,
+  "thesis": "Strong uptrend regime (ADX 35.44, +DI > -DI) and sustained EMA21 support justify riding the established momentum higher.",
+  "counterargument": "Strong uptrend regime and neutral RSI at the Bollinger middle band provide no overextended levels to fade for a mean reversion setup.",
+  "invalidation": "Invalid if price hits stop 73150.24 (~0.401% / 1.5x ATR) or regime flips away from trend_up.",
+  "leading_agent": "trend_agent",
+  "risk_veto": false,
+  "agent_votes": {
+    "trend_agent": "approve",
+    "mean_reversion_agent": "oppose",
+    "risk_agent": "neutral",
+    "allocator_agent": "approve"
+  },
+  "opinions": [
+    {
+      "name": "trend_agent",
+      "vote": "approve",
+      "direction": "long",
+      "confidence": 0.7,
+      "rationale": "Strong uptrend regime (ADX 35.44, +DI > -DI) and sustained EMA21 support justify riding the established momentum higher."
+    },
+    {
+      "name": "mean_reversion_agent",
+      "vote": "oppose",
+      "direction": null,
+      "confidence": 0.85,
+      "rationale": "Strong uptrend regime and neutral RSI at the Bollinger middle band provide no overextended levels to fade for a mean reversion setup."
+    },
+    {
+      "name": "risk_agent",
+      "vote": "neutral",
+      "direction": null,
+      "confidence": 0.4,
+      "rationale": "Strong uptrend structure exists but 1m flat volume and sub-1% ATR indicate compression/chop rather than actionable momentum."
+    },
+    {
+      "name": "allocator_agent",
+      "vote": "approve",
+      "direction": null,
+      "confidence": 0.637,
+      "rationale": "Requested 6.37% of equity (conf 0.64)."
+    }
+  ]
+}

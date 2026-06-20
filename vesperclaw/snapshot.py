@@ -279,8 +279,9 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
     }
     signals = _compute_signals(df, snap_vals)
 
+    # Only fetch live microstructure in true live mode (no replay window, real feed).
     micro = {"funding_rate": None, "open_interest": None, "long_short_ratio": None}
-    if df is None or not config.DEMO_DATA:
+    if df is None and not config.DEMO_DATA:
         try:
             micro = _fetch_microstructure(symbol)
         except Exception:  # noqa: BLE001
