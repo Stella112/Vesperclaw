@@ -1,0 +1,17 @@
+[Unit]
+Description=VesperClaw autonomous paper-trading loop
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vesperclaw
+EnvironmentFile=/opt/vesperclaw/.env
+ExecStart=/opt/vesperclaw/.venv/bin/python /opt/vesperclaw/main.py --mode live_paper
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/vesperclaw/logs/loop.log
+StandardError=append:/opt/vesperclaw/logs/loop.log
+
+[Install]
+WantedBy=multi-user.target

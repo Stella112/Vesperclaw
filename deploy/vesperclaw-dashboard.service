@@ -1,0 +1,19 @@
+[Unit]
+Description=VesperClaw Streamlit dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vesperclaw
+EnvironmentFile=/opt/vesperclaw/.env
+ExecStart=/opt/vesperclaw/.venv/bin/streamlit run /opt/vesperclaw/dashboard/app.py \
+  --server.address 0.0.0.0 --server.port 8501 --server.headless true \
+  --browser.gatherUsageStats false
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/vesperclaw/logs/dashboard.log
+StandardError=append:/opt/vesperclaw/logs/dashboard.log
+
+[Install]
+WantedBy=multi-user.target
