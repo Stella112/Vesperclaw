@@ -79,6 +79,14 @@ def run_cycle(engine: PaperEngine, symbols: list[str],
     engine.mark_prices(price_map)
     engine.save()
 
+    # refresh the accountability briefing periodically (keeps LLM cost low)
+    if engine.state["cycle"] % config.BRIEFING_EVERY_CYCLES == 0:
+        try:
+            from vesperclaw import briefing
+            briefing.write_briefing()
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"briefing skipped: {e}")
+
     logger.info(
         f"cycle {engine.state['cycle']} | "
         f"{', '.join(actions) if actions else 'no entries'} | "

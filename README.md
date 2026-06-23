@@ -1,23 +1,33 @@
-# 🦅 VesperClaw
+# 🦅 VesperClaw — the accountable trading agent
 
-**An autonomous, Qwen-powered Bitget paper-trading agent that turns live market data into explainable Signal Mandates, gates every trade through an AgentVault risk firewall, executes in paper mode, and evolves its strategy weights after closed trades — so it learns which strategy fits each market regime.**
+**VesperClaw is the first paper-trading agent that is accountable: it shows you the trades it took, the trades it *refused*, and proves — with receipts — whether each refusal was right.**
 
 Built for the **Bitget AI Base Camp Hackathon S1 — Track 1 (Trading Agent)**.
-Paper-mode only. No real capital. Every decision — including every *refusal* — is logged and replayable.
+Qwen-powered. Paper-mode only, no real capital.
 
 🔴 **Live demo (running 24/7):** http://38.49.209.149:8501
 
 ---
 
-## Why VesperClaw
+## The wow: the Conviction Ledger
 
-Static trading bots fail because markets are **regime-based**: a strategy that works in a trend dies in chop. VesperClaw's bet is that the valuable, AI-native part isn't the signal — it's the **full autonomous lifecycle made auditable and self-improving**:
+Every trading bot shows a P&L line. **None of them show the trades they refused — and prove the refusal saved money.** VesperClaw does:
+
+- It logs **every refused trade**, then watches the market and scores it: a **`good_block`** if price later hit the stop it avoided, a **`bad_block`** if it would have won.
+- The dashboard's **Conviction Ledger** puts *Taken* and *Refused* side by side, with a running headline like *"7/9 refusals were correct — avg 1.8% adverse move avoided."*
+- The agent then **files a plain-English self-briefing**: what it traded, what it refused, whether it was right, and one thing it would do better.
+
+That's the AI-native part: not the signal, but an agent that is **answerable for every action and every inaction.**
+
+## How it earns that
+
+Under the hood, every action flows through an auditable lifecycle:
 
 ```
-perceive → reason (with a counterargument) → risk-gate → execute → record → evolve
+perceive → reason (with a counterargument) → risk-gate → execute → record → self-evaluate
 ```
 
-The headline isn't the P&L. It's the **audit trail**: you can replay every decision, see the thesis *and its strongest counterargument*, watch the firewall refuse a trade, and read how closed trades reshaped the agent's strategy weights.
+You can replay each decision: the thesis *and its strongest counterargument*, the firewall's reasoned approve/refuse, the close, and how outcomes reshaped the agent's per-regime strategy weights. The Conviction Ledger and self-briefing sit on top of this trail.
 
 ---
 

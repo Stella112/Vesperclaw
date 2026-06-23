@@ -106,6 +106,9 @@ EVO_MIN_SAMPLES = 5            # closed trades per regime before adjusting
 EVO_STEP_CAP = 0.05           # max weight change per update
 EVO_WEIGHT_FLOOR = 0.10       # no agent ever drops below this
 
+# How often (cycles) to regenerate the agent's self-briefing
+BRIEFING_EVERY_CYCLES = int(os.getenv("BRIEFING_EVERY_CYCLES", "20"))
+
 DEFAULT_WEIGHTS = {
     "trend_agent": 0.35,
     "mean_reversion_agent": 0.30,
@@ -136,6 +139,7 @@ WEIGHTS_FILE = f"{DATA_DIR}/weights.json"
 VAULT_SAVES_FILE = f"{DATA_DIR}/vault_saves.json"
 TRADE_LOG_CSV = f"{DATA_DIR}/trade_log.csv"
 PROFILE_FILE = f"{DATA_DIR}/profile.json"   # natural-language "vibe" overrides
+BRIEFING_FILE = f"{DATA_DIR}/briefing.json"  # agent's accountability self-briefing
 # prediction-market state (kept separate from the crypto loop)
 PRED_PORTFOLIO_FILE = f"{DATA_DIR}/pred_portfolio.json"
 PRED_MANDATES_FILE = f"{DATA_DIR}/pred_mandates.json"

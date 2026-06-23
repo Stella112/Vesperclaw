@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-06-23T14:27:37.998363+00:00",
+  "equity": 10016.83,
+  "return_pct": 0.17,
+  "ledger": {
+    "taken": {
+      "count": 6,
+      "wins": 4,
+      "win_rate": 66.7,
+      "pnl": 21.98
+    },
+    "refused": {
+      "count": 1,
+      "resolved": 1,
+      "good_blocks": 0,
+      "bad_blocks": 1,
+      "refusal_accuracy_pct": 0.0,
+      "avg_adverse_move_avoided_pct": 0.0
+    },
+    "headline": "0/1 refusals were correct"
+  },
+  "text": "Equity 10017 (+0.17%). Took 6 trades (66.7% win rate). 0/1 refusals were correct. Risk discipline held: every refusal is logged and scored against the outcome."
+}

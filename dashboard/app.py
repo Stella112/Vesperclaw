@@ -19,7 +19,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
-from vesperclaw import store, evolution  # noqa: E402
+from vesperclaw import store, evolution, briefing as briefing_mod  # noqa: E402
 
 st.set_page_config(page_title="VesperClaw", page_icon="🦅", layout="wide")
 
@@ -57,6 +57,41 @@ def header(portfolio):
     c3.metric("Win rate", f"{wr:.1f}%")
     c4.metric("Open positions", len(portfolio.get("open_positions", [])))
     c5.metric("Cycle", portfolio.get("cycle", 0))
+
+
+def accountability_hero():
+    """THE hero: the Conviction Ledger + the agent's self-briefing.
+
+    What makes VesperClaw different — it shows the trades it REFUSED and proves
+    whether refusing was right.
+    """
+    ledger = briefing_mod.build_ledger()
+    taken, refused = ledger["taken"], ledger["refused"]
+
+    st.subheader("⚖️ Conviction Ledger — the agent held accountable")
+    st.markdown(f"#### {ledger['headline']}")
+    taken_col, refused_col = st.columns(2)
+    with taken_col:
+        st.markdown("##### ✅ Trades TAKEN")
+        a, b, c = st.columns(3)
+        a.metric("Count", taken["count"])
+        b.metric("Win rate", f"{taken['win_rate']}%")
+        c.metric("Net PnL", f"${taken['pnl']:,.2f}")
+    with refused_col:
+        st.markdown("##### ⛔ Trades REFUSED")
+        a, b, c = st.columns(3)
+        a.metric("Refused", refused["count"])
+        b.metric("Refusals correct", f"{refused['refusal_accuracy_pct']}%",
+                 help="Share of resolved refusals where the market later hit the stop it avoided")
+        c.metric("Avg move avoided", f"{refused['avg_adverse_move_avoided_pct']}%")
+
+    brief = store.read_json(config.BRIEFING_FILE, {})
+    if brief.get("text"):
+        st.markdown("##### 🗣️ VesperClaw's self-briefing")
+        st.info(brief["text"])
+        st.caption(f"filed {brief.get('timestamp','')}")
+    else:
+        st.caption("Self-briefing will appear once the agent has run a few cycles.")
 
 
 def basket_panel(mandates):
@@ -218,17 +253,14 @@ def main():
         st.caption(f"Provider: **{config.LLM_PROVIDER}**")
         st.caption(f"Basket: **{', '.join(config.SYMBOL_ALLOWLIST)}**")
         st.caption(f"TF: **{config.LOOP_TIMEFRAME}** · Leverage: **{config.LEVERAGE}x**")
-        profile = store.read_json(config.PROFILE_FILE, {})
-        if profile.get("overrides"):
-            st.markdown("**🎚️ Vibe profile**")
-            st.caption(profile.get("source", ""))
-            st.json(profile["overrides"], expanded=False)
         if st.button("🔄 Refresh"):
             st.rerun()
         auto = st.checkbox("Auto-refresh (5s)", value=False)
 
     portfolio, mandates, orders, evo, saves = load_all()
     header(portfolio)
+    st.divider()
+    accountability_hero()
     st.divider()
     basket_panel(mandates)
     st.divider()
