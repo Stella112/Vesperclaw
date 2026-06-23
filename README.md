@@ -52,7 +52,8 @@ Bitget market data (multi-asset basket: BTC, ETH, SOL, …)
 The agent **scans a basket of symbols every cycle**, detects each one's regime
 independently, and can hold concurrent positions across assets under a
 portfolio-wide risk cap. Perception fuses price, positioning (funding/OI), and
-**crowd sentiment** (Fear & Greed, optional CryptoPanic news) — the Sentiment
+**crowd sentiment** (Fear & Greed plus keyless GDELT headlines, public crypto
+RSS fallback, and optional CryptoPanic if a token is available) — the Sentiment
 agent applies contrarian caution (e.g. it won't chase shorts into Extreme Fear).
 
 ### Regime referee
@@ -76,7 +77,7 @@ Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR
 - **Close-based, per-regime learning** — weights update only when a trade *closes*, learned independently per regime, with sample minimums, capped steps, and a weight floor so noise can't whipsaw the system.
 - **Deterministic ground truth + LLM judgment** — Python computes the entry signal (verifiable, reproducible); Qwen supplies confidence and the narrative. If the LLM is unavailable, the loop degrades to heuristics and keeps running.
 - **Multi-asset market scan** — every cycle the agent evaluates a basket (BTC, ETH, SOL, …), each with its own regime, holding concurrent positions under a portfolio-wide cap.
-- **Sentiment-aware perception** — fuses Fear & Greed and (optional) news flow with price/positioning; the Sentiment agent applies contrarian caution at crowd extremes.
+- **Sentiment-aware perception** — fuses Fear & Greed and keyless GDELT/RSS news flow with price/positioning; optional CryptoPanic support is used first if a token is configured. The Sentiment agent applies contrarian caution at crowd extremes.
 
 ---
 
@@ -150,7 +151,7 @@ main.py                   # orchestrator loop (live_paper + fast_demo)
 vesperclaw/
   llm_client.py           # Qwen/Claude provider-agnostic client
   snapshot.py             # market snapshot + ADX regime referee
-  sentiment.py            # Fear & Greed + CryptoPanic news perception
+  sentiment.py            # Fear & Greed + GDELT/RSS/CryptoPanic news perception
   agents.py               # analyst council (incl. sentiment) + adversarial debate
   mandate.py              # Signal Mandate assembler
   vault.py                # AgentVault risk firewall + Vault Saves

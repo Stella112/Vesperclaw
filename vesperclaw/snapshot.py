@@ -59,6 +59,7 @@ class Snapshot:
     fg_class: str | None = None
     news_count: int = 0
     news_bias: float = 0.0
+    news_source: str = "none"
     headlines: list[str] = field(default_factory=list)
     # on-chain (macro risk-on/off proxy; None if unavailable)
     defi_tvl_change_7d: float | None = None
@@ -295,7 +296,14 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
 
     # Only fetch live microstructure in true live mode (no replay window, real feed).
     micro = {"funding_rate": None, "open_interest": None, "long_short_ratio": None}
-    senti = {"fear_greed": None, "fg_class": None, "news_count": 0, "news_bias": 0.0, "headlines": []}
+    senti = {
+        "fear_greed": None,
+        "fg_class": None,
+        "news_count": 0,
+        "news_bias": 0.0,
+        "news_source": "none",
+        "headlines": [],
+    }
     onchain = {"defi_tvl_change_7d": None, "onchain_regime": None}
     if is_live:
         try:
@@ -343,6 +351,7 @@ def build_snapshot(symbol: str | None = None, timeframe: str | None = None,
         fg_class=senti.get("fg_class"),
         news_count=senti.get("news_count", 0),
         news_bias=senti.get("news_bias", 0.0),
+        news_source=senti.get("news_source", "none"),
         headlines=senti.get("headlines", []),
         defi_tvl_change_7d=onchain.get("defi_tvl_change_7d"),
         onchain_regime=onchain.get("onchain_regime"),
