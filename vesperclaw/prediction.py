@@ -32,8 +32,23 @@ from vesperclaw.llm_client import get_client
 GAMMA_URL = "https://gamma-api.polymarket.com/markets"
 FOOTBALL_TERMS = (
     "football", "soccer", "premier league", "champions league", "europa league",
-    "world cup", "euro ", "uefa", "fifa", "epl", "la liga", "serie a",
+    "euro ", "uefa", "epl", "la liga", "serie a",
     "bundesliga", "nfl", "super bowl", "college football",
+)
+WORLD_CUP_TERMS = (
+    "world cup", "worldcup", "fifa world cup", "world cup 2026", "fifa 2026",
+)
+WORLD_CUP_FIXTURE_TERMS = (
+    "scotland v brazil", "scotland vs brazil", "brazil beat scotland",
+    "morocco v haiti", "morocco vs haiti", "morocco beat haiti",
+    "switzerland v canada", "switzerland vs canada", "canada beat switzerland",
+    "bosnia v qatar", "bosnia vs qatar", "qatar beat bosnia",
+    "czechia v mexico", "czechia vs mexico", "mexico beat czechia",
+    "south africa v korea", "south africa vs korea", "korea republic",
+    "ecuador v germany", "ecuador vs germany", "germany beat ecuador",
+    "turkiye v usa", "turkiye vs usa", "usa beat turkiye",
+    "paraguay v australia", "paraguay vs australia",
+    "colombia v portugal", "colombia vs portugal", "portugal beat colombia",
 )
 
 
@@ -78,6 +93,8 @@ def _market_blob(market: dict[str, Any]) -> str:
 
 def market_topic(market: dict[str, Any]) -> str:
     blob = _market_blob(market)
+    if any(term in blob for term in WORLD_CUP_TERMS) or any(term in blob for term in WORLD_CUP_FIXTURE_TERMS):
+        return "world_cup"
     return "football" if any(term in blob for term in FOOTBALL_TERMS) else "general"
 
 
@@ -88,7 +105,7 @@ def fetch_markets(limit: int, topic: str = "general") -> list[dict[str, Any]]:
     if limit <= 0:
         return []
     try:
-        fetch_limit = limit * 3 if topic == "general" else max(limit * 25, 80)
+        fetch_limit = limit * 3 if topic == "general" else max(limit * 40, 160)
         r = requests.get(
             GAMMA_URL,
             params={"closed": "false", "active": "true", "order": "volume",
@@ -123,6 +140,8 @@ def fetch_markets(limit: int, topic: str = "general") -> list[dict[str, Any]]:
 
 def fetch_prediction_universe() -> list[dict[str, Any]]:
     markets = fetch_markets(config.PRED_MARKETS, topic="general")
+    if config.PRED_INCLUDE_WORLD_CUP and config.PRED_WORLD_CUP_MARKETS > 0:
+        markets.extend(fetch_markets(config.PRED_WORLD_CUP_MARKETS, topic="world_cup"))
     if config.PRED_INCLUDE_FOOTBALL and config.PRED_FOOTBALL_MARKETS > 0:
         markets.extend(fetch_markets(config.PRED_FOOTBALL_MARKETS, topic="football"))
 
@@ -170,7 +189,17 @@ def _synthetic_markets(limit: int, topic: str = "general") -> list[dict[str, Any
         "Will the favorite win the next listed football market?",
         "Will a Premier League match finish with over 2.5 goals?",
     ]
-    qs = football_qs if topic == "football" else general_qs
+    world_cup_qs = [
+        "Will Brazil beat Scotland in their 2026 FIFA World Cup group match?",
+        "Will Morocco beat Haiti in their 2026 FIFA World Cup group match?",
+        "Will Canada beat Switzerland in their 2026 FIFA World Cup group match?",
+        "Will Mexico beat Czechia in their 2026 FIFA World Cup group match?",
+        "Will South Africa beat Korea Republic in their 2026 FIFA World Cup group match?",
+        "Will Germany beat Ecuador in their next 2026 FIFA World Cup group match?",
+        "Will the USA beat Turkiye in their next 2026 FIFA World Cup group match?",
+        "Will Argentina win their next 2026 FIFA World Cup group match?",
+    ]
+    qs = world_cup_qs if topic == "world_cup" else football_qs if topic == "football" else general_qs
     return [
         {"id": f"SYN-{topic.upper()}-{i}", "question": qs[i % len(qs)],
          "yes_price": round(float(rng.uniform(0.2, 0.8)), 3),
@@ -201,8 +230,9 @@ def estimate_probability(question: str, market_yes: float, topic: str = "general
         f"Market topic: {topic}\n"
         f"Market question: {question}\n"
         f"Market-implied P(YES) = {market_yes:.2f}\n"
-        "If this is football/soccer/NFL, be extra calibrated: sports lines are efficient, "
-        "so only claim edge when the question has a clear base-rate or market-pricing reason.\n"
+        "If this is football/soccer/NFL or the 2026 FIFA World Cup, be extra calibrated: "
+        "sports lines are efficient, so only claim edge when the question has a clear "
+        "base-rate, tournament-context, or market-pricing reason.\n"
         f'Respond ONLY with JSON: {{"prob":0.0-1.0,"confidence":0.0-1.0,'
         f'"thesis":"one sentence on your estimate","counterargument":"one sentence on the main risk"}}'
     )
@@ -474,7 +504,9 @@ def run(cycles: int | None, interval: int = 0) -> None:
     store.ensure_dirs()
     engine = PredEngine()
     logger.info(f"VesperClaw PREDICTION mode | provider={config.LLM_PROVIDER} "
-                f"markets={config.PRED_MARKETS} football={config.PRED_FOOTBALL_MARKETS if config.PRED_INCLUDE_FOOTBALL else 0}")
+                f"markets={config.PRED_MARKETS} "
+                f"world_cup={config.PRED_WORLD_CUP_MARKETS if config.PRED_INCLUDE_WORLD_CUP else 0} "
+                f"football={config.PRED_FOOTBALL_MARKETS if config.PRED_INCLUDE_FOOTBALL else 0}")
     n = 0
     while True:
         run_cycle(engine)

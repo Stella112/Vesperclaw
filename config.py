@@ -143,6 +143,8 @@ PRED_INITIAL_BALANCE = float(os.getenv("PRED_INITIAL_BALANCE", "10000"))
 PRED_MARKETS = int(os.getenv("PRED_MARKETS", "8"))            # markets scanned per cycle
 PRED_INCLUDE_FOOTBALL = os.getenv("PRED_INCLUDE_FOOTBALL", "true").lower() == "true"
 PRED_FOOTBALL_MARKETS = int(os.getenv("PRED_FOOTBALL_MARKETS", "4"))
+PRED_INCLUDE_WORLD_CUP = os.getenv("PRED_INCLUDE_WORLD_CUP", "true").lower() == "true"
+PRED_WORLD_CUP_MARKETS = int(os.getenv("PRED_WORLD_CUP_MARKETS", "6"))
 
 
 # ── Storage ───────────────────────────────────────────────────────────

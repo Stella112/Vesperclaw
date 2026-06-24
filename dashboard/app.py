@@ -1193,6 +1193,8 @@ def prediction_panel() -> None:
     approve_rate = (approved / total_seen * 100) if total_seen else 0.0
     football_seen = sum(1 for m in mandates if m.get("topic") == "football")
     football_open = sum(1 for p in pf.get("open_positions", []) if p.get("topic") == "football")
+    world_cup_seen = sum(1 for m in mandates if m.get("topic") == "world_cup")
+    world_cup_open = sum(1 for p in pf.get("open_positions", []) if p.get("topic") == "world_cup")
 
     st.markdown(
         f"""
@@ -1205,13 +1207,14 @@ def prediction_panel() -> None:
         unsafe_allow_html=True,
     )
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
     c1.metric("Prediction equity", f"${eq:,.2f}", f"{(eq / config.PRED_INITIAL_BALANCE - 1) * 100:+.2f}%")
     c2.metric("Prediction PnL", f"${pred_pnl:+,.2f}")
     c3.metric("Observed accuracy", f"{accuracy:.1f}%", f"target {config.PRED_TARGET_ACCURACY:.0%}")
     c4.metric("Closed / Open", f"{closed} / {len(pf.get('open_positions', []))}")
     c5.metric("Approved rate", f"{approve_rate:.1f}%", f"{rejected} refused")
-    c6.metric("Football markets", football_seen, f"{football_open} open")
+    c6.metric("World Cup", world_cup_seen, f"{world_cup_open} open")
+    c7.metric("Football", football_seen, f"{football_open} open")
 
     if mandates:
         rows = [

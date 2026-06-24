@@ -148,6 +148,8 @@ All tunables live in [`config.py`](config.py) and are overridable via `.env`. Hi
 | `PRED_TARGET_ACCURACY` | `0.90` | prediction-market target shown on dashboard |
 | `PRED_MIN_CONFIDENCE` | `0.70` | minimum Probability Agent confidence before paper-trading |
 | `PRED_EDGE_THRESHOLD` | `0.10` | minimum odds gap vs. market-implied probability |
+| `PRED_INCLUDE_WORLD_CUP` | `true` | include a dedicated 2026 FIFA World Cup prediction lane |
+| `PRED_WORLD_CUP_MARKETS` | `6` | extra World Cup markets scanned per prediction cycle |
 | `PRED_INCLUDE_FOOTBALL` | `true` | include football/soccer/NFL prediction markets |
 | `PRED_FOOTBALL_MARKETS` | `4` | extra football markets scanned per prediction cycle |
 
@@ -223,7 +225,7 @@ Beyond the multi-asset spot agent, VesperClaw now spans:
 - **On-chain macro signal** — DeFiLlama total-TVL 7-day trend as a risk-on/off
   proxy that nudges directional bias (keyless).
 - **Prediction markets** — a **Probability Agent** (Qwen) estimates true odds for
-  live Polymarket questions, including a separate football/soccer/NFL scan, and trades the gap vs. the market-implied price;
+  live Polymarket questions, including dedicated 2026 FIFA World Cup and football/soccer/NFL scans, and trades the gap vs. the market-implied price;
   paper-only (read feed, no wallet), probability-move + timeout exits, full audit
   trail. Its **90% target mode** is deliberately selective: it requires both
   minimum edge and minimum confidence, records rejected markets as proof of

@@ -62,7 +62,7 @@ VesperClaw currently supports:
 - Close-based per-regime learning.
 - Loop Map and `LOOP_STATE.md` memory, showing Perceive, Propose, Verify, Execute, Monitor, and Learn as inspectable stages.
 - Natural-language contract trading, where a user can describe a perpetuals style and the system compiles validated settings for symbols, leverage, confidence, sizing, and exposure without bypassing AgentVault.
-- Prediction-market paper mode for Polymarket-style probability trades, including football/soccer/NFL markets, with a 90% target gate that trades only when edge and confidence clear strict thresholds and reports observed accuracy from closed outcomes.
+- Prediction-market paper mode for Polymarket-style probability trades, including a dedicated 2026 FIFA World Cup lane plus broader football/soccer/NFL markets, with a 90% target gate that trades only when edge and confidence clear strict thresholds and reports observed accuracy from closed outcomes.
 - A Streamlit glass-box dashboard for demo and review.
 - Keyless news/trend perception through GDELT and public crypto RSS, with optional CryptoPanic support.
 
