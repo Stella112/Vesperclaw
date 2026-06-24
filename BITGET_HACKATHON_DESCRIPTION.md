@@ -57,8 +57,8 @@ VesperClaw currently supports:
 - Vault Saves, which score blocked trades after the fact.
 - Conviction Ledger, which compares taken trades against refused trades.
 - Close-based per-regime learning.
-- Natural-language "vibe" configuration, where a user can describe a trading style and the system compiles validated config overrides.
-- Prediction-market paper mode for Polymarket-style probability trades.
+- Natural-language contract trading, where a user can describe a perpetuals style and the system compiles validated settings for symbols, leverage, confidence, sizing, and exposure without bypassing AgentVault.
+- Prediction-market paper mode for Polymarket-style probability trades, with a 90% target gate that trades only when edge and confidence clear strict thresholds and reports observed accuracy from closed outcomes.
 - A Streamlit glass-box dashboard for demo and review.
 - Keyless news/trend perception through GDELT and public crypto RSS, with optional CryptoPanic support.
 
@@ -81,6 +81,7 @@ Below that, the dashboard surfaces:
 - Mandate ledger.
 - Trade log download.
 - Prediction-market mode results when present.
+- A Contract Command console for natural-language perpetuals profiles.
 
 ## Safety Posture
 

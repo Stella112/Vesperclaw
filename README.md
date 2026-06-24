@@ -71,6 +71,10 @@ Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR
 
 ## Key design choices (the upgrades that matter)
 
+- **Natural-language contract trading** — type a trading style such as
+  `"BTC/ETH perpetuals, high conviction only, max 3x, avoid chop"` and Qwen
+  compiles it into validated contract settings. The compiler can tune leverage,
+  symbols, confidence, sizing, and exposure, but it cannot bypass AgentVault.
 - **Explainable mandates with a built-in counterargument** — every proposed trade records the thesis *and* the strongest case against it (adversarial pass).
 - **AgentVault risk firewall** — hard limits on size, daily loss, drawdown, volatility, cooldown, R:R, open positions. Returns a reasoned decision, never a silent block.
 - **Vault Saves** — when the firewall blocks/shrinks a trade, it later checks whether that block actually avoided a loss (`good_block` vs `bad_block`).
@@ -126,6 +130,9 @@ All tunables live in [`config.py`](config.py) and are overridable via `.env`. Hi
 | `MAX_POSITION_SIZE_PCT` | `0.10` | vault size cap |
 | `MAX_DAILY_LOSS_PCT` | `0.05` | halt new trades after −5% day |
 | `MAX_DRAWDOWN_PCT` | `0.20` | lockdown after −20% from peak |
+| `PRED_TARGET_ACCURACY` | `0.90` | prediction-market target shown on dashboard |
+| `PRED_MIN_CONFIDENCE` | `0.70` | minimum Probability Agent confidence before paper-trading |
+| `PRED_EDGE_THRESHOLD` | `0.10` | minimum odds gap vs. market-implied probability |
 
 ---
 
@@ -140,6 +147,9 @@ All tunables live in [`config.py`](config.py) and are overridable via `.env`. Hi
 | `data/evolution.json` | human-readable weight-change log |
 | `data/vault_saves.json` | blocked/downsized trades + good/bad verdicts |
 | `data/portfolio.json` | live portfolio state |
+| `data/profile.json` | natural-language contract command and validated overrides |
+| `data/pred_trade_log.csv` | prediction-market paper fills and closes |
+| `data/pred_orders.json` | closed prediction-market outcomes and accuracy sample |
 
 ---
 
@@ -194,10 +204,14 @@ Beyond the multi-asset spot agent, VesperClaw now spans:
 - **Prediction markets** — a **Probability Agent** (Qwen) estimates true odds for
   live Polymarket questions and trades the gap vs. the market-implied price;
   paper-only (read feed, no wallet), probability-move + timeout exits, full audit
-  trail. Reuses the same mandate → risk-gate → paper → log skeleton.
+  trail. Its **90% target mode** is deliberately selective: it requires both
+  minimum edge and minimum confidence, records rejected markets as proof of
+  restraint, and reports observed accuracy from closed paper outcomes.
 - **Natural-language vibe trading** — describe a style in English; Qwen compiles it
-  into *validated, range-clamped* config overrides (it can tune the agent, not
-  bypass its risk limits).
+  into *validated, range-clamped* contract settings (symbols, leverage,
+  confidence, sizing, exposure). The live loop hot-loads the saved profile
+  between cycles, so the dashboard becomes a natural-language contract console,
+  not just a viewer.
 
 ## Roadmap (room to grow)
 

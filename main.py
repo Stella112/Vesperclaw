@@ -37,11 +37,27 @@ from vesperclaw.snapshot import build_snapshot
 from vesperclaw.vault import evaluate as vault_evaluate
 
 MIN_WINDOW = max(config.BB_PERIOD, config.EMA_SLOW, config.ATR_PERIOD) + 5
+_ACTIVE_PROFILE_SIG = ""
+
+
+def _apply_saved_profile_if_changed() -> None:
+    """Hot-load the natural-language contract profile between cycles."""
+    global _ACTIVE_PROFILE_SIG
+    from vesperclaw import vibe
+
+    profile = vibe.load_profile()
+    sig = repr(sorted((k, repr(v)) for k, v in profile.items()))
+    if sig == _ACTIVE_PROFILE_SIG:
+        return
+    _ACTIVE_PROFILE_SIG = sig
+    if profile:
+        vibe.apply_profile(profile)
 
 
 def run_cycle(engine: PaperEngine, symbols: list[str],
               frame_map: dict[str, pd.DataFrame] | None = None) -> list[dict[str, Any]]:
     """Execute one autonomous cycle across the whole basket."""
+    _apply_saved_profile_if_changed()
     engine.begin_cycle()  # advance cycle + daily rollover; prices marked after scan
     price_map: dict[str, float] = {}
     records: list[dict[str, Any]] = []
@@ -163,7 +179,9 @@ def _print_summary(engine: PaperEngine) -> None:
 def _reset_state() -> None:
     for path in (config.PORTFOLIO_FILE, config.MANDATES_FILE, config.ORDERS_FILE,
                  config.EVOLUTION_FILE, config.WEIGHTS_FILE, config.VAULT_SAVES_FILE,
-                 config.TRADE_LOG_CSV):
+                 config.TRADE_LOG_CSV, config.PRED_PORTFOLIO_FILE,
+                 config.PRED_MANDATES_FILE, config.PRED_ORDERS_FILE,
+                 config.PRED_TRADE_LOG_CSV):
         if os.path.exists(path):
             os.remove(path)
     logger.info("State reset.")

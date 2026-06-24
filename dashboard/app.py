@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
 from vesperclaw import briefing as briefing_mod  # noqa: E402
-from vesperclaw import evolution, store  # noqa: E402
+from vesperclaw import evolution, store, vibe  # noqa: E402
 
 st.set_page_config(page_title="VesperClaw | Bitget Agent", page_icon=":chart_with_upwards_trend:", layout="wide")
 
@@ -1055,15 +1055,40 @@ def mandates_table(mandates: list[dict]) -> None:
 def prediction_panel() -> None:
     pf = store.read_json(data_file("PRED_PORTFOLIO_FILE", "pred_portfolio.json"), {})
     mandates = store.read_json(data_file("PRED_MANDATES_FILE", "pred_mandates.json"), [])
-    if not pf and not mandates:
+    orders = store.read_json(data_file("PRED_ORDERS_FILE", "pred_orders.json"), [])
+    mandates = mandates if isinstance(mandates, list) else []
+    orders = orders if isinstance(orders, list) else []
+    if not pf and not mandates and not orders:
         return
 
     st.markdown("### Prediction Markets")
     eq = pf.get("equity", config.PRED_INITIAL_BALANCE)
-    c1, c2, c3 = st.columns(3)
+    closed = len(orders)
+    wins = sum(1 for order in orders if order.get("win"))
+    accuracy = (wins / closed * 100) if closed else 0.0
+    pred_pnl = round(float(eq) - config.PRED_INITIAL_BALANCE, 2)
+    approved = sum(1 for m in mandates if m.get("vault", {}).get("decision") == "APPROVED")
+    rejected = sum(1 for m in mandates if m.get("vault", {}).get("decision") == "REJECTED")
+    total_seen = approved + rejected
+    approve_rate = (approved / total_seen * 100) if total_seen else 0.0
+
+    st.markdown(
+        f"""
+        <div class="vc-callout">
+            <strong>90% target mode:</strong> the Probability Agent only paper-trades when
+            estimated edge and confidence clear the high-accuracy gate. Weak markets become
+            visible refusals instead of hidden non-events.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Prediction equity", f"${eq:,.2f}", f"{(eq / config.PRED_INITIAL_BALANCE - 1) * 100:+.2f}%")
-    c2.metric("Closed", pf.get("closed_trades", 0))
-    c3.metric("Open", len(pf.get("open_positions", [])))
+    c2.metric("Prediction PnL", f"${pred_pnl:+,.2f}")
+    c3.metric("Observed accuracy", f"{accuracy:.1f}%", f"target {config.PRED_TARGET_ACCURACY:.0%}")
+    c4.metric("Closed / Open", f"{closed} / {len(pf.get('open_positions', []))}")
+    c5.metric("Approved rate", f"{approve_rate:.1f}%", f"{rejected} refused")
 
     if mandates:
         rows = [
@@ -1072,12 +1097,97 @@ def prediction_panel() -> None:
                 "yes": m.get("yes_price"),
                 "estimate": m.get("est_prob"),
                 "edge": m.get("edge"),
+                "confidence": m.get("confidence"),
                 "action": m.get("action"),
                 "decision": m.get("vault", {}).get("decision"),
+                "gate": m.get("vault", {}).get("reason"),
             }
             for m in mandates[-12:]
         ]
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.markdown("#### Probability Agent Decisions")
+        st.dataframe(
+            pd.DataFrame(rows),
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "yes": st.column_config.NumberColumn("market yes", format="%.3f"),
+                "estimate": st.column_config.NumberColumn("agent estimate", format="%.3f"),
+                "edge": st.column_config.NumberColumn("edge", format="%+.3f"),
+                "confidence": st.column_config.ProgressColumn("confidence", min_value=0, max_value=1),
+            },
+        )
+
+    if pf.get("open_positions"):
+        st.markdown("#### Open Prediction Positions")
+        open_rows = [
+            {
+                "market": p.get("question", "")[:70],
+                "side": p.get("side"),
+                "entry_yes": p.get("entry_yes"),
+                "last_yes": pf.get("last_yes", {}).get(p.get("market_id"), p.get("entry_yes")),
+                "target_yes": p.get("target_yes"),
+                "stop_yes": p.get("stop_yes"),
+                "confidence": p.get("confidence"),
+                "stake": p.get("stake"),
+            }
+            for p in pf.get("open_positions", [])
+        ]
+        st.dataframe(pd.DataFrame(open_rows), hide_index=True, use_container_width=True)
+
+    if orders:
+        st.markdown("#### Closed Prediction Outcomes")
+        closed_rows = [
+            {
+                "market": o.get("question", "")[:70],
+                "side": o.get("side"),
+                "entry_yes": o.get("entry_yes"),
+                "exit_yes": o.get("exit_yes"),
+                "pnl": o.get("pnl"),
+                "win": o.get("win"),
+                "reason": o.get("reason"),
+                "confidence": o.get("confidence"),
+            }
+            for o in orders[-20:]
+        ]
+        st.dataframe(
+            pd.DataFrame(closed_rows),
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "pnl": st.column_config.NumberColumn("PnL", format="$%+.2f"),
+                "confidence": st.column_config.ProgressColumn("confidence", min_value=0, max_value=1),
+            },
+        )
+
+
+def contract_command_console() -> None:
+    profile_doc = store.read_json(data_file("PROFILE_FILE", "profile.json"), {})
+    source = profile_doc.get("source", "") if isinstance(profile_doc, dict) else ""
+    overrides = profile_doc.get("overrides", {}) if isinstance(profile_doc, dict) else {}
+
+    st.markdown("### Contract Command")
+    st.caption("Natural-language control for the paper perpetuals agent. The compiler can tune settings, but AgentVault still enforces hard risk limits.")
+    if source:
+        st.caption(f"Active command: {source}")
+    if overrides:
+        st.json(overrides, expanded=False)
+
+    prompt = st.text_area(
+        "Describe the contract trading style",
+        value="High-conviction BTC and ETH perpetuals only, max 3x leverage, avoid choppy markets, smaller size after losses.",
+        height=90,
+        label_visibility="collapsed",
+    )
+    if st.button("Compile Contract Profile", use_container_width=True):
+        if not prompt.strip():
+            st.warning("Write a contract-trading instruction first.")
+            return
+        profile = vibe.set_vibe(prompt.strip())
+        if profile:
+            st.success("Contract profile saved. The live loop applies saved profile updates on the next cycle.")
+            st.json(profile, expanded=False)
+        else:
+            st.warning("No safe overrides were produced. The existing risk settings remain active.")
 
 
 def sidebar(auto_default: bool = False) -> bool:
@@ -1089,6 +1199,8 @@ def sidebar(auto_default: bool = False) -> bool:
         st.markdown(f"**Timeframe**: `{config.LOOP_TIMEFRAME}`")
         st.markdown(f"**Leverage**: `{config.LEVERAGE:g}x`")
         st.markdown(f"**Mode**: `{config.RUN_MODE}`")
+        st.divider()
+        contract_command_console()
         st.divider()
         if st.button("Refresh terminal", use_container_width=True):
             st.rerun()

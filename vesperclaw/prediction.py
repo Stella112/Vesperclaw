@@ -36,6 +36,24 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _parse_yes_price(raw: Any) -> float | None:
+    prices = raw
+    if isinstance(prices, str):
+        try:
+            prices = json.loads(prices)
+        except json.JSONDecodeError:
+            return None
+    if not prices:
+        return None
+    try:
+        yes = float(prices[0])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if 0.01 <= yes <= 0.99:
+        return yes
+    return None
+
+
 # ── market data ──────────────────────────────────────────────────────────
 
 def fetch_markets(limit: int) -> list[dict[str, Any]]:
@@ -49,12 +67,9 @@ def fetch_markets(limit: int) -> list[dict[str, Any]]:
         )
         out = []
         for m in r.json():
-            prices = m.get("outcomePrices")
-            if isinstance(prices, str):
-                prices = json.loads(prices)
-            if not prices:
+            yes = _parse_yes_price(m.get("outcomePrices"))
+            if yes is None:
                 continue
-            yes = float(prices[0])
             if 0.05 < yes < 0.95:  # skip near-resolved markets
                 out.append({
                     "id": str(m.get("id")),
@@ -70,6 +85,19 @@ def fetch_markets(limit: int) -> list[dict[str, Any]]:
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Polymarket fetch failed ({e}); using synthetic markets.")
     return _synthetic_markets(limit)
+
+
+def fetch_market_yes(market_id: str) -> float | None:
+    """Best-effort single-market refresh for open positions."""
+    if market_id.startswith("SYN-"):
+        return None
+    try:
+        r = requests.get(f"{GAMMA_URL}/{market_id}", timeout=10)
+        r.raise_for_status()
+        return _parse_yes_price(r.json().get("outcomePrices"))
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"Polymarket reprice skipped for {market_id}: {e}")
+        return None
 
 
 def _synthetic_markets(limit: int) -> list[dict[str, Any]]:
@@ -140,9 +168,59 @@ class PredPosition:
     entry_cycle: int
     entry_time: str
     est_prob: float
+    confidence: float = 0.0
+    edge: float = 0.0
+    mandate_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def prediction_accuracy() -> dict[str, Any]:
+    orders = store.read_json(config.PRED_ORDERS_FILE, [])
+    if not isinstance(orders, list):
+        orders = []
+    closed = len(orders)
+    wins = sum(1 for o in orders if o.get("win"))
+    accuracy = wins / closed if closed else 0.0
+    pnl = round(sum(float(o.get("pnl", 0.0)) for o in orders), 2)
+    return {
+        "closed": closed,
+        "wins": wins,
+        "losses": max(0, closed - wins),
+        "accuracy": accuracy,
+        "accuracy_pct": round(accuracy * 100, 1),
+        "target_pct": round(config.PRED_TARGET_ACCURACY * 100, 1),
+        "net_pnl": pnl,
+    }
+
+
+def high_accuracy_gate(edge: float, confidence: float) -> tuple[bool, list[str], dict[str, Any]]:
+    """Return whether a prediction mandate clears the 90%-target gate."""
+    stats = prediction_accuracy()
+    min_edge = config.PRED_EDGE_THRESHOLD
+    min_conf = config.PRED_MIN_CONFIDENCE
+    if stats["closed"] >= 5 and stats["accuracy"] < config.PRED_TARGET_ACCURACY:
+        # If realized accuracy lags the target, become more selective.
+        shortfall = min(config.PRED_TARGET_ACCURACY - stats["accuracy"], 0.20)
+        min_edge += shortfall * 0.25
+        min_conf += shortfall * 0.25
+
+    reasons: list[str] = []
+    if abs(edge) < min_edge:
+        reasons.append(f"edge {edge:+.2f} below required {min_edge:.2f}")
+    if confidence < min_conf:
+        reasons.append(f"confidence {confidence:.2f} below required {min_conf:.2f}")
+    if not reasons:
+        reasons.append(f"edge {edge:+.2f} and confidence {confidence:.2f} cleared high-accuracy gate")
+
+    return not any("below required" in r for r in reasons), reasons, {
+        "target_accuracy": config.PRED_TARGET_ACCURACY,
+        "observed_accuracy": stats["accuracy"],
+        "min_edge": round(min_edge, 3),
+        "min_confidence": round(min_conf, 3),
+        "sample_size": stats["closed"],
+    }
 
 
 class PredEngine:
@@ -191,18 +269,20 @@ class PredEngine:
             target, stop = est["prob"], min(0.99, yes + config.PRED_STOP_BAND)
         fee = stake * config.TAKER_FEE
         self.state["balance"] = round(self.state["balance"] - fee, 2)
+        mandate_id = f"PM-{datetime.now(timezone.utc):%Y-%m-%d}-{seq:04d}"
         pos = PredPosition(
             market_id=market["id"], question=market["question"], side=side,
             entry_yes=yes, stake=stake, target_yes=round(target, 3), stop_yes=round(stop, 3),
             entry_cycle=self.state["cycle"], entry_time=_now(), est_prob=est["prob"],
+            confidence=est.get("confidence", 0.0), edge=est.get("edge", est["prob"] - yes),
+            mandate_id=mandate_id,
         )
         self.state["open_positions"].append(pos.to_dict())
         self.state["last_yes"][market["id"]] = yes
-        mandate_id = f"PM-{datetime.now(timezone.utc):%Y-%m-%d}-{seq:04d}"
         store.append_trade_log_to(config.PRED_TRADE_LOG_CSV, {
             "timestamp": pos.entry_time, "mandate_id": mandate_id, "market": pos.question,
             "side": side, "event": "OPEN", "yes_price": yes, "stake": stake,
-            "est_prob": est["prob"], "pnl": 0.0,
+            "est_prob": est["prob"], "confidence": pos.confidence, "edge": pos.edge, "pnl": 0.0,
         })
         logger.info(f"PRED OPEN {side} @ {yes} (est {est['prob']:.2f}) — {pos.question[:60]}")
         return pos.to_dict()
@@ -248,15 +328,18 @@ class PredEngine:
         self.state["wins"] += int(win)
         self.state["losses"] += int(not win)
         rec = {
-            "market_id": p.market_id, "question": p.question, "side": p.side,
+            "mandate_id": p.mandate_id, "market_id": p.market_id, "question": p.question, "side": p.side,
             "entry_yes": p.entry_yes, "exit_yes": yes, "stake": p.stake,
             "pnl": pnl, "pnl_pct": round(pnl / p.stake * 100, 2) if p.stake else 0,
-            "reason": reason, "est_prob": p.est_prob, "win": win, "exit_time": _now(),
+            "reason": reason, "est_prob": p.est_prob, "confidence": p.confidence,
+            "edge": p.edge, "win": win, "entry_time": p.entry_time, "exit_time": _now(),
         }
+        store.append_json_list(config.PRED_ORDERS_FILE, rec, cap=1000)
         store.append_trade_log_to(config.PRED_TRADE_LOG_CSV, {
-            "timestamp": rec["exit_time"], "mandate_id": "", "market": p.question,
+            "timestamp": rec["exit_time"], "mandate_id": p.mandate_id, "market": p.question,
             "side": p.side, "event": f"CLOSE_{reason.upper()}", "yes_price": yes,
-            "stake": p.stake, "est_prob": p.est_prob, "pnl": pnl,
+            "stake": p.stake, "est_prob": p.est_prob, "confidence": p.confidence,
+            "edge": p.edge, "pnl": pnl,
         })
         logger.info(f"PRED CLOSE {p.side} @ {yes} [{reason}] pnl={pnl} — {p.question[:50]}")
         return rec
@@ -276,6 +359,10 @@ def run_cycle(engine: PredEngine) -> None:
     markets = fetch_markets(config.PRED_MARKETS)
     # exits first (re-price held markets from the fresh fetch)
     prices = {m["id"]: m["yes_price"] for m in markets}
+    for market_id in engine.held_market_ids() - set(prices):
+        yes = fetch_market_yes(market_id)
+        if yes is not None:
+            prices[market_id] = round(yes, 3)
     engine.update_and_exit(prices)
 
     held = engine.held_market_ids()
@@ -284,12 +371,12 @@ def run_cycle(engine: PredEngine) -> None:
             continue
         est = estimate_probability(m["question"], m["yes_price"])
         edge = est["prob"] - m["yes_price"]
+        est["edge"] = edge
         side = "YES" if edge > 0 else "NO"
         seq = engine.next_seq()
 
-        decision = "REJECTED"
-        if abs(edge) >= config.PRED_EDGE_THRESHOLD and est["confidence"] >= 0.45:
-            decision = "APPROVED"
+        approved, gate_reasons, gate = high_accuracy_gate(edge, est["confidence"])
+        decision = "APPROVED" if approved else "REJECTED"
 
         record = {
             "mandate_id": f"PM-{datetime.now(timezone.utc):%Y-%m-%d}-{seq:04d}",
@@ -298,8 +385,15 @@ def run_cycle(engine: PredEngine) -> None:
             "edge": round(edge, 3), "side": side, "action": f"BUY_{side}" if decision == "APPROVED" else "NO_TRADE",
             "confidence": est["confidence"], "thesis": est["thesis"],
             "counterargument": est["counterargument"],
-            "vault": {"decision": decision, "reason":
-                      f"edge {edge:+.2f} vs threshold {config.PRED_EDGE_THRESHOLD}"},
+            "vault": {
+                "decision": decision,
+                "reason": "; ".join(gate_reasons),
+                "target_accuracy": gate["target_accuracy"],
+                "observed_accuracy": gate["observed_accuracy"],
+                "min_edge": gate["min_edge"],
+                "min_confidence": gate["min_confidence"],
+                "sample_size": gate["sample_size"],
+            },
             "equity": engine.state["equity"],
         }
         store.append_json_list(config.PRED_MANDATES_FILE, record, cap=1000)
@@ -328,7 +422,11 @@ def run(cycles: int | None, interval: int = 0) -> None:
     s = engine.state
     closed = s["closed_trades"]
     wr = (s["wins"] / closed * 100) if closed else 0.0
-    logger.info(f"PRED SUMMARY equity={s['equity']} trades={closed} win_rate={wr:.1f}%")
+    acc = prediction_accuracy()
+    logger.info(
+        f"PRED SUMMARY equity={s['equity']} trades={closed} win_rate={wr:.1f}% "
+        f"accuracy_target={acc['target_pct']:.1f}% observed={acc['accuracy_pct']:.1f}%"
+    )
 
 
 if __name__ == "__main__":

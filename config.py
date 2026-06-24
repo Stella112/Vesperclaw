@@ -120,7 +120,9 @@ REGIMES = ["trend_up", "trend_down", "range", "uncertain"]
 
 # ── Storage ───────────────────────────────────────────────────────────
 # ── Prediction markets (#6) ───────────────────────────────────────────
-PRED_EDGE_THRESHOLD = float(os.getenv("PRED_EDGE_THRESHOLD", "0.08"))  # min |est-market| to trade
+PRED_TARGET_ACCURACY = float(os.getenv("PRED_TARGET_ACCURACY", "0.90"))
+PRED_MIN_CONFIDENCE = float(os.getenv("PRED_MIN_CONFIDENCE", "0.70"))
+PRED_EDGE_THRESHOLD = float(os.getenv("PRED_EDGE_THRESHOLD", "0.10"))  # min |est-market| to trade
 PRED_MAX_POSITIONS = int(os.getenv("PRED_MAX_POSITIONS", "3"))
 PRED_SIZE_PCT = float(os.getenv("PRED_SIZE_PCT", "0.05"))
 PRED_STOP_BAND = float(os.getenv("PRED_STOP_BAND", "0.06"))   # YES-price stop distance
@@ -143,4 +145,5 @@ BRIEFING_FILE = f"{DATA_DIR}/briefing.json"  # agent's accountability self-brief
 # prediction-market state (kept separate from the crypto loop)
 PRED_PORTFOLIO_FILE = f"{DATA_DIR}/pred_portfolio.json"
 PRED_MANDATES_FILE = f"{DATA_DIR}/pred_mandates.json"
+PRED_ORDERS_FILE = f"{DATA_DIR}/pred_orders.json"
 PRED_TRADE_LOG_CSV = f"{DATA_DIR}/pred_trade_log.csv"
