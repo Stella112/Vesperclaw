@@ -582,12 +582,8 @@ def loop_map_panel(portfolio: dict, mandates: list[dict], orders: list[dict], ev
         ("6", "Learn", latest_evo.get("reason", "waiting for samples")),
     ]
     cards = "".join(
-        f"""
-        <div class="vc-panel">
-            <h3><span class="vc-step-num">{num}</span>{safe_text(name)}</h3>
-            <p>{safe_text(detail)}</p>
-        </div>
-        """
+        f'<div class="vc-panel"><h3><span class="vc-step-num">{num}</span>'
+        f'{safe_text(name)}</h3><p>{safe_text(detail)}</p></div>'
         for num, name, detail in stages
     )
     st.markdown("### Loop Engine")
@@ -602,7 +598,7 @@ def loop_map_panel(portfolio: dict, mandates: list[dict], orders: list[dict], ev
         unsafe_allow_html=True,
     )
     st.write("")
-    st.markdown(f"<div class='vc-stack'>{cards}</div>", unsafe_allow_html=True)
+    st.markdown(f'<div class="vc-stack">{cards}</div>', unsafe_allow_html=True)
 
 
 def loop_state_panel() -> None:
