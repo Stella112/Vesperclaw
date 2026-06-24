@@ -387,6 +387,45 @@ def pnl_summary(portfolio: dict) -> dict[str, float]:
     }
 
 
+def profit_guard_summary(portfolio: dict) -> dict[str, Any]:
+    equity = float(portfolio.get("equity", config.INITIAL_BALANCE))
+    peak = float(portfolio.get("peak_equity", max(equity, config.INITIAL_BALANCE)))
+    day_start = float(portfolio.get("day_start_equity", config.INITIAL_BALANCE))
+    drawdown = (peak - equity) / peak if peak else 0.0
+    daily_loss = (day_start - equity) / day_start if day_start else 0.0
+    cycle = int(portfolio.get("cycle", 0))
+    guard_until = int(portfolio.get("profit_guard_until_cycle", 0))
+    loss_streak = int(portfolio.get("consecutive_losses", 0))
+    lockout = cycle < guard_until
+    active = (
+        config.PROFIT_GUARD_ENABLED
+        and (
+            lockout
+            or loss_streak >= config.PROFIT_GUARD_LOSS_STREAK
+            or drawdown >= config.PROFIT_GUARD_DRAWDOWN_PCT
+            or daily_loss >= config.PROFIT_GUARD_DAILY_LOSS_PCT
+        )
+    )
+    reasons = []
+    if lockout:
+        reasons.append(f"lockout until cycle {guard_until}")
+    if loss_streak >= config.PROFIT_GUARD_LOSS_STREAK:
+        reasons.append(f"{loss_streak} consecutive losses")
+    if drawdown >= config.PROFIT_GUARD_DRAWDOWN_PCT:
+        reasons.append(f"{drawdown:.2%} drawdown")
+    if daily_loss >= config.PROFIT_GUARD_DAILY_LOSS_PCT:
+        reasons.append(f"{daily_loss:.2%} daily loss")
+    return {
+        "active": active,
+        "lockout": lockout,
+        "reason": "; ".join(reasons) if reasons else "clear",
+        "loss_streak": loss_streak,
+        "guard_until": guard_until,
+        "drawdown_pct": drawdown * 100,
+        "daily_loss_pct": daily_loss * 100,
+    }
+
+
 def latest_vault_decision(mandates: list[dict]) -> str:
     for mandate in reversed(mandates):
         decision = mandate.get("vault", {}).get("decision")
@@ -503,6 +542,30 @@ def kpi_strip(portfolio: dict) -> None:
     c4.metric("Closed trades", closed)
     c5.metric("Win rate", f"{wr:.1f}%")
     c6.metric("Cycle", portfolio.get("cycle", 0))
+
+
+def profit_guard_panel(portfolio: dict) -> None:
+    guard = profit_guard_summary(portfolio)
+    color = "#ff5470" if guard["lockout"] else "#ffd166" if guard["active"] else "#20e3b2"
+    label = "LOCKOUT" if guard["lockout"] else "ACTIVE" if guard["active"] else "CLEAR"
+    st.markdown(
+        f"""
+        <div class="vc-panel">
+            <h3>{badge(f"PROFIT GUARD {label}", color)}</h3>
+            <p>
+                {safe_text(guard['reason'])}. When active, VesperClaw raises the confidence floor,
+                blocks configured choppy regimes, and caps new position size at
+                {config.PROFIT_GUARD_MAX_SIZE_PCT:.1%}.
+            </p>
+            <div class="vc-ledger-stat">
+                <div class="vc-mini"><span>Loss Streak</span><strong>{guard['loss_streak']}</strong></div>
+                <div class="vc-mini"><span>Drawdown</span><strong>{guard['drawdown_pct']:.2f}%</strong></div>
+                <div class="vc-mini"><span>Daily Loss</span><strong>{guard['daily_loss_pct']:.2f}%</strong></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def trust_command_center(
@@ -1224,6 +1287,8 @@ def main() -> None:
     hero(portfolio, mandates)
     st.write("")
     kpi_strip(portfolio)
+    st.write("")
+    profit_guard_panel(portfolio)
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     trust_command_center(portfolio, mandates, orders, saves, evo)

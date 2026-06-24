@@ -69,11 +69,33 @@ class PaperEngine:
             "closed_trades": 0,
             "wins": 0,
             "losses": 0,
+            "consecutive_losses": 0,
+            "profit_guard_until_cycle": 0,
         }
         state = store.read_json(config.PORTFOLIO_FILE, default)
+        had_profit_guard = "profit_guard_until_cycle" in state
         for k, v in default.items():
             state.setdefault(k, v)
+        if "consecutive_losses" not in state or state.get("closed_trades", 0) > 0:
+            state["consecutive_losses"] = self._infer_loss_streak(state.get("consecutive_losses", 0))
+        if (
+            config.PROFIT_GUARD_ENABLED
+            and not had_profit_guard
+            and state["consecutive_losses"] >= config.PROFIT_GUARD_LOSS_STREAK
+        ):
+            state["profit_guard_until_cycle"] = state.get("cycle", 0) + config.PROFIT_GUARD_COOLDOWN_BARS
         return state
+
+    def _infer_loss_streak(self, fallback: int = 0) -> int:
+        orders = store.read_json(config.ORDERS_FILE, [])
+        if not isinstance(orders, list) or not orders:
+            return int(fallback or 0)
+        streak = 0
+        for order in reversed(orders):
+            if order.get("win"):
+                break
+            streak += 1
+        return streak
 
     def save(self) -> None:
         store.write_json(config.PORTFOLIO_FILE, self.state)
@@ -99,6 +121,8 @@ class PaperEngine:
             "symbol_open_count": sum(1 for p in positions if p.get("symbol") == symbol),
             "cycle": self.state["cycle"],
             "cooldown_until_cycle": self.state["cooldown_until_cycle"],
+            "consecutive_losses": self.state.get("consecutive_losses", 0),
+            "profit_guard_until_cycle": self.state.get("profit_guard_until_cycle", 0),
         }
 
     # ── lifecycle ──
@@ -252,8 +276,18 @@ class PaperEngine:
         win = net > 0
         self.state["wins"] += int(win)
         self.state["losses"] += int(not win)
+        self.state["consecutive_losses"] = 0 if win else self.state.get("consecutive_losses", 0) + 1
         # cooldown after each close
         self.state["cooldown_until_cycle"] = self.state["cycle"] + config.COOLDOWN_BARS
+        if (
+            config.PROFIT_GUARD_ENABLED
+            and not win
+            and self.state["consecutive_losses"] >= config.PROFIT_GUARD_LOSS_STREAK
+        ):
+            self.state["profit_guard_until_cycle"] = max(
+                self.state.get("profit_guard_until_cycle", 0),
+                self.state["cycle"] + config.PROFIT_GUARD_COOLDOWN_BARS,
+            )
 
         # return on margin (leveraged), falls back to notional for legacy positions
         basis = p.margin or p.notional

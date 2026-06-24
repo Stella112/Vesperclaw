@@ -77,6 +77,7 @@ Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR
   symbols, confidence, sizing, and exposure, but it cannot bypass AgentVault.
 - **Explainable mandates with a built-in counterargument** — every proposed trade records the thesis *and* the strongest case against it (adversarial pass).
 - **AgentVault risk firewall** — hard limits on size, daily loss, drawdown, volatility, cooldown, R:R, open positions. Returns a reasoned decision, never a silent block.
+- **Profit Guard mode** — after loss clusters or drawdown, VesperClaw pauses new entries, blocks choppy regimes, raises the confidence floor, and caps position size until conditions improve.
 - **Vault Saves** — when the firewall blocks/shrinks a trade, it later checks whether that block actually avoided a loss (`good_block` vs `bad_block`).
 - **Close-based, per-regime learning** — weights update only when a trade *closes*, learned independently per regime, with sample minimums, capped steps, and a weight floor so noise can't whipsaw the system.
 - **Deterministic ground truth + LLM judgment** — Python computes the entry signal (verifiable, reproducible); Qwen supplies confidence and the narrative. If the LLM is unavailable, the loop degrades to heuristics and keeps running.
@@ -130,6 +131,9 @@ All tunables live in [`config.py`](config.py) and are overridable via `.env`. Hi
 | `MAX_POSITION_SIZE_PCT` | `0.10` | vault size cap |
 | `MAX_DAILY_LOSS_PCT` | `0.05` | halt new trades after −5% day |
 | `MAX_DRAWDOWN_PCT` | `0.20` | lockdown after −20% from peak |
+| `PROFIT_GUARD_LOSS_STREAK` | `2` | activate lockout after consecutive losses |
+| `PROFIT_GUARD_COOLDOWN_BARS` | `24` | pause duration after a loss cluster |
+| `PROFIT_GUARD_MAX_SIZE_PCT` | `0.035` | max new position size while guard is active |
 | `PRED_TARGET_ACCURACY` | `0.90` | prediction-market target shown on dashboard |
 | `PRED_MIN_CONFIDENCE` | `0.70` | minimum Probability Agent confidence before paper-trading |
 | `PRED_EDGE_THRESHOLD` | `0.10` | minimum odds gap vs. market-implied probability |
@@ -201,6 +205,9 @@ Beyond the multi-asset spot agent, VesperClaw now spans:
 - **Portfolio-level risk** — AgentVault caps *aggregate same-direction exposure*
   across the correlated basket and downsizes to fit remaining room — a portfolio
   risk manager, not just a per-trade gate.
+- **Profit Guard** — a capital-preservation layer that reacts to live outcomes:
+  loss streaks trigger a lockout, drawdown raises the entry bar, uncertain regimes
+  are blocked, and new sizes are capped until the agent earns risk back.
 - **On-chain macro signal** — DeFiLlama total-TVL 7-day trend as a risk-on/off
   proxy that nudges directional bias (keyless).
 - **Prediction markets** — a **Probability Agent** (Qwen) estimates true odds for

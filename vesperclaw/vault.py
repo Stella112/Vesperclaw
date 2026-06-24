@@ -41,6 +41,7 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
     reasons: list[str] = []
 
     req = mandate.requested_size_pct
+    guard = _profit_guard_state(portfolio)
 
     # No-trade mandates never reach execution.
     if mandate.action == "NO_TRADE":
@@ -60,9 +61,13 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
         reasons.append(f"{mandate.symbol} not allowlisted")
 
     # 3. confidence floor
-    checks["confidence_floor"] = mandate.confidence >= config.MIN_CONFIDENCE
+    min_confidence = config.MIN_CONFIDENCE + (
+        config.PROFIT_GUARD_MIN_CONFIDENCE_BONUS if guard["active"] else 0.0
+    )
+    min_confidence = min(0.95, min_confidence)
+    checks["confidence_floor"] = mandate.confidence >= min_confidence
     if not checks["confidence_floor"]:
-        reasons.append(f"confidence {mandate.confidence} < {config.MIN_CONFIDENCE}")
+        reasons.append(f"confidence {mandate.confidence} < {min_confidence}")
 
     # 4. risk-agent / volatility veto
     checks["volatility_ok"] = not mandate.risk_veto
@@ -90,6 +95,16 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
         reasons.append(f"max drawdown breached ({drawdown:.2%}) — lockdown")
 
     # 8. position limits — portfolio-wide and per-symbol
+    checks["profit_guard_lockout_ok"] = not guard["lockout"]
+    if not checks["profit_guard_lockout_ok"]:
+        reasons.append(guard["reason"])
+
+    checks["profit_guard_regime_ok"] = not (
+        guard["active"] and mandate.regime in config.PROFIT_GUARD_BLOCK_REGIMES
+    )
+    if not checks["profit_guard_regime_ok"]:
+        reasons.append(f"profit guard blocks {mandate.regime} regime")
+
     open_count = len(portfolio.get("open_positions", []))
     sym_count = portfolio.get("symbol_open_count", 0)
     checks["positions_ok"] = (
@@ -123,10 +138,17 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
     checks["cooldown_ok"] = not cooldown_active
 
     # ── decide ──
+    if guard["lockout"]:
+        return VaultDecision(
+            mandate.mandate_id, "DELAYED", False, req, 0.0,
+            guard["reason"], checks,
+        )
+
     hard_fail = not all(
         checks[k] for k in (
             "paper_mode", "allowlisted_symbol", "confidence_floor",
             "volatility_ok", "min_rr", "daily_loss_ok", "drawdown_ok",
+            "profit_guard_lockout_ok", "profit_guard_regime_ok",
             "positions_ok", "portfolio_exposure_ok",
         )
     )
@@ -146,10 +168,16 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
         )
 
     # size cap -> possible downsize (per-trade cap AND remaining portfolio room)
-    approved = min(req, config.MAX_POSITION_SIZE_PCT, exposure_room)
+    size_cap = min(config.MAX_POSITION_SIZE_PCT, exposure_room)
+    if guard["active"]:
+        size_cap = min(size_cap, config.PROFIT_GUARD_MAX_SIZE_PCT)
+    approved = min(req, size_cap)
     if approved < req - 1e-9:
-        capped_by = "portfolio exposure room" if exposure_room <= config.MAX_POSITION_SIZE_PCT \
-            else f"max {config.MAX_POSITION_SIZE_PCT:.0%}"
+        if guard["active"] and approved <= config.PROFIT_GUARD_MAX_SIZE_PCT + 1e-9:
+            capped_by = "profit guard"
+        else:
+            capped_by = "portfolio exposure room" if exposure_room <= config.MAX_POSITION_SIZE_PCT \
+                else f"max {config.MAX_POSITION_SIZE_PCT:.0%}"
         decision = VaultDecision(
             mandate.mandate_id, "APPROVED_DOWNSIZED", True, req, round(approved, 4),
             f"size reduced from {req:.2%} to {approved:.2%} ({capped_by})",
@@ -162,6 +190,42 @@ def evaluate(mandate: Mandate, portfolio: dict[str, Any]) -> VaultDecision:
         mandate.mandate_id, "APPROVED", True, req, round(approved, 4),
         "all checks passed", checks,
     )
+
+
+def _profit_guard_state(portfolio: dict[str, Any]) -> dict[str, Any]:
+    if not config.PROFIT_GUARD_ENABLED:
+        return {"active": False, "lockout": False, "reason": "profit guard disabled"}
+
+    cycle = portfolio.get("cycle", 0)
+    guard_until = portfolio.get("profit_guard_until_cycle", 0)
+    loss_streak = portfolio.get("consecutive_losses", 0)
+    equity = float(portfolio.get("equity", config.INITIAL_BALANCE))
+    peak = float(portfolio.get("peak_equity", max(equity, config.INITIAL_BALANCE)))
+    day_start = float(portfolio.get("day_start_equity", config.INITIAL_BALANCE))
+    drawdown = (peak - equity) / peak if peak else 0.0
+    daily_loss = (day_start - equity) / day_start if day_start else 0.0
+
+    lockout = cycle < guard_until
+    active = (
+        lockout
+        or loss_streak >= config.PROFIT_GUARD_LOSS_STREAK
+        or drawdown >= config.PROFIT_GUARD_DRAWDOWN_PCT
+        or daily_loss >= config.PROFIT_GUARD_DAILY_LOSS_PCT
+    )
+    bits = []
+    if lockout:
+        bits.append(f"profit guard lockout until cycle {guard_until}")
+    if loss_streak >= config.PROFIT_GUARD_LOSS_STREAK:
+        bits.append(f"{loss_streak} consecutive losses")
+    if drawdown >= config.PROFIT_GUARD_DRAWDOWN_PCT:
+        bits.append(f"{drawdown:.2%} drawdown")
+    if daily_loss >= config.PROFIT_GUARD_DAILY_LOSS_PCT:
+        bits.append(f"{daily_loss:.2%} daily loss")
+    return {
+        "active": active,
+        "lockout": lockout,
+        "reason": "; ".join(bits) or "profit guard clear",
+    }
 
 
 def _record_vault_save(mandate: Mandate, decision: VaultDecision, downsized: bool = False) -> None:

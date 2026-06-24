@@ -100,6 +100,18 @@ DANGER_VOLATILITY_PCT = 5.0    # ATR as % of price -> Risk Agent veto
 COOLDOWN_BARS = 4
 MIN_RR = 1.5                   # minimum risk/reward ratio
 
+# Profit Guard: tighten the agent after losses instead of letting it bleed in chop.
+PROFIT_GUARD_ENABLED = os.getenv("PROFIT_GUARD_ENABLED", "true").lower() == "true"
+PROFIT_GUARD_LOSS_STREAK = int(os.getenv("PROFIT_GUARD_LOSS_STREAK", "2"))
+PROFIT_GUARD_COOLDOWN_BARS = int(os.getenv("PROFIT_GUARD_COOLDOWN_BARS", "24"))
+PROFIT_GUARD_MIN_CONFIDENCE_BONUS = float(os.getenv("PROFIT_GUARD_MIN_CONFIDENCE_BONUS", "0.15"))
+PROFIT_GUARD_MAX_SIZE_PCT = float(os.getenv("PROFIT_GUARD_MAX_SIZE_PCT", "0.035"))
+PROFIT_GUARD_DRAWDOWN_PCT = float(os.getenv("PROFIT_GUARD_DRAWDOWN_PCT", "0.01"))
+PROFIT_GUARD_DAILY_LOSS_PCT = float(os.getenv("PROFIT_GUARD_DAILY_LOSS_PCT", "0.005"))
+PROFIT_GUARD_BLOCK_REGIMES = [
+    r.strip() for r in os.getenv("PROFIT_GUARD_BLOCK_REGIMES", "uncertain").split(",") if r.strip()
+]
+
 
 # ── Evolution engine ──────────────────────────────────────────────────
 EVO_MIN_SAMPLES = 5            # closed trades per regime before adjusting

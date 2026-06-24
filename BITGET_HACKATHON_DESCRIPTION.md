@@ -54,6 +54,7 @@ VesperClaw currently supports:
 - Paper perpetuals with leverage-aware notional sizing and funding-cost awareness.
 - Portfolio-wide exposure caps for correlated same-direction positions.
 - AgentVault risk gating with reasoned approve, downsize, reject, and delay outcomes.
+- Profit Guard mode that pauses after loss clusters, blocks choppy regimes, raises the confidence floor, and caps size during drawdown.
 - Vault Saves, which score blocked trades after the fact.
 - Conviction Ledger, which compares taken trades against refused trades.
 - Close-based per-regime learning.
