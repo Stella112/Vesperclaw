@@ -1,6 +1,6 @@
 # 🦅 VesperClaw — the accountable trading agent
 
-**VesperClaw is the first paper-trading agent that is accountable: it shows you the trades it took, the trades it *refused*, and proves — with receipts — whether each refusal was right.**
+**VesperClaw is a loop-engineered paper-trading agent: it perceives markets, proposes trades, verifies them through a checker, executes only approved paper orders, monitors risk, and writes lessons back to memory.**
 
 Built for the **Bitget AI Base Camp Hackathon S1 — Track 1 (Trading Agent)**.
 Qwen-powered. Paper-mode only, no real capital.
@@ -9,15 +9,17 @@ Qwen-powered. Paper-mode only, no real capital.
 
 ---
 
-## The wow: the Conviction Ledger
+## The wow: loop-engineered accountability
 
-Every trading bot shows a P&L line. **None of them show the trades they refused — and prove the refusal saved money.** VesperClaw does:
+Most AI trading demos prompt an LLM for a trade. VesperClaw runs a self-checking loop.
+
+Every trading bot shows a P&L line. **Very few show the trades they refused — and prove the refusal saved money.** VesperClaw does:
 
 - It logs **every refused trade**, then watches the market and scores it: a **`good_block`** if price later hit the stop it avoided, a **`bad_block`** if it would have won.
 - The dashboard's **Conviction Ledger** puts *Taken* and *Refused* side by side, with a running headline like *"7/9 refusals were correct — avg 1.8% adverse move avoided."*
 - The agent then **files a plain-English self-briefing**: what it traded, what it refused, whether it was right, and one thing it would do better.
 
-That's the AI-native part: not the signal, but an agent that is **answerable for every action and every inaction.**
+That's the AI-native part: not a single prompt, but a loop that is **answerable for every action and every inaction.**
 
 ## How it earns that
 
@@ -32,6 +34,12 @@ You can replay each decision: the thesis *and its strongest counterargument*, th
 ---
 
 ## The loop
+
+Loop-engineered view:
+
+```text
+Perceive -> Propose -> Verify -> Execute -> Monitor -> Learn -> Write Memory -> Repeat
+```
 
 ```
 Bitget market data (multi-asset basket: BTC, ETH, SOL, …)
@@ -75,6 +83,9 @@ Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR
   `"BTC/ETH perpetuals, high conviction only, max 3x, avoid chop"` and Qwen
   compiles it into validated contract settings. The compiler can tune leverage,
   symbols, confidence, sizing, and exposure, but it cannot bypass AgentVault.
+- **Loop Map + state memory** - the dashboard shows the six running loops
+  (Perceive, Propose, Verify, Execute, Monitor, Learn), and `data/LOOP_STATE.md`
+  summarizes the live agent memory in a human-readable form.
 - **Explainable mandates with a built-in counterargument** — every proposed trade records the thesis *and* the strongest case against it (adversarial pass).
 - **AgentVault risk firewall** — hard limits on size, daily loss, drawdown, volatility, cooldown, R:R, open positions. Returns a reasoned decision, never a silent block.
 - **Profit Guard mode** — after loss clusters or drawdown, VesperClaw pauses new entries, blocks choppy regimes, raises the confidence floor, and caps position size until conditions improve.
@@ -154,6 +165,7 @@ All tunables live in [`config.py`](config.py) and are overridable via `.env`. Hi
 | `data/vault_saves.json` | blocked/downsized trades + good/bad verdicts |
 | `data/portfolio.json` | live portfolio state |
 | `data/profile.json` | natural-language contract command and validated overrides |
+| `data/LOOP_STATE.md` | human-readable loop state generated from the JSON audit trail |
 | `data/pred_trade_log.csv` | prediction-market paper fills and closes |
 | `data/pred_orders.json` | closed prediction-market outcomes and accuracy sample |
 

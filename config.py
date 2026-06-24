@@ -156,6 +156,7 @@ VAULT_SAVES_FILE = f"{DATA_DIR}/vault_saves.json"
 TRADE_LOG_CSV = f"{DATA_DIR}/trade_log.csv"
 PROFILE_FILE = f"{DATA_DIR}/profile.json"   # natural-language "vibe" overrides
 BRIEFING_FILE = f"{DATA_DIR}/briefing.json"  # agent's accountability self-briefing
+LOOP_STATE_FILE = f"{DATA_DIR}/LOOP_STATE.md"  # human-readable loop memory
 # prediction-market state (kept separate from the crypto loop)
 PRED_PORTFOLIO_FILE = f"{DATA_DIR}/pred_portfolio.json"
 PRED_MANDATES_FILE = f"{DATA_DIR}/pred_mandates.json"

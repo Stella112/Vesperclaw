@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
 from vesperclaw import briefing as briefing_mod  # noqa: E402
-from vesperclaw import evolution, store, vibe  # noqa: E402
+from vesperclaw import evolution, loop_state, store, vibe  # noqa: E402
 
 st.set_page_config(page_title="VesperClaw | Bitget Agent", page_icon=":chart_with_upwards_trend:", layout="wide")
 
@@ -566,6 +566,67 @@ def profit_guard_panel(portfolio: dict) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def loop_map_panel(portfolio: dict, mandates: list[dict], orders: list[dict], evo: list[dict]) -> None:
+    latest = mandates[-1] if mandates else {}
+    latest_order = orders[-1] if orders else {}
+    latest_evo = evo[-1] if evo else {}
+    guard = profit_guard_summary(portfolio)
+    stages = [
+        ("1", "Perceive", f"{latest.get('symbol', 'n/a')} / {latest.get('regime', 'booting')}"),
+        ("2", "Propose", f"{latest.get('action', 'n/a')} @ conf {latest.get('confidence', 'n/a')}"),
+        ("3", "Verify", latest.get("vault", {}).get("decision", "n/a")),
+        ("4", "Execute", f"{latest_order.get('symbol', 'n/a')} PnL {latest_order.get('pnl', 'n/a')}"),
+        ("5", "Monitor", "Guard " + ("LOCKOUT" if guard["lockout"] else "ACTIVE" if guard["active"] else "CLEAR")),
+        ("6", "Learn", latest_evo.get("reason", "waiting for samples")),
+    ]
+    cards = "".join(
+        f"""
+        <div class="vc-panel">
+            <h3><span class="vc-step-num">{num}</span>{safe_text(name)}</h3>
+            <p>{safe_text(detail)}</p>
+        </div>
+        """
+        for num, name, detail in stages
+    )
+    st.markdown("### Loop Engine")
+    st.markdown(
+        """
+        <div class="vc-callout">
+            VesperClaw is loop-engineered: it does not ask an LLM for a trade and stop.
+            It runs a self-checking cycle that perceives, proposes, verifies, executes,
+            monitors risk, and writes lessons back to memory.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    st.markdown(f"<div class='vc-stack'>{cards}</div>", unsafe_allow_html=True)
+
+
+def loop_state_panel() -> None:
+    state_path = data_file("LOOP_STATE_FILE", "LOOP_STATE.md")
+    if not os.path.exists(state_path):
+        try:
+            loop_state.write_loop_state()
+        except Exception:  # noqa: BLE001
+            return
+    try:
+        with open(state_path, "r", encoding="utf-8") as f:
+            state_text = f.read()
+    except OSError:
+        return
+    st.markdown("### Loop State Memory")
+    st.caption("Human-readable state file generated from the JSON audit trail.")
+    st.download_button(
+        "Download LOOP_STATE.md",
+        state_text,
+        file_name="LOOP_STATE.md",
+        mime="text/markdown",
+    )
+    with st.expander("Preview LOOP_STATE.md", expanded=False):
+        st.markdown(state_text)
 
 
 def trust_command_center(
@@ -1291,6 +1352,9 @@ def main() -> None:
     profit_guard_panel(portfolio)
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
+    loop_map_panel(portfolio, mandates, orders, evo)
+
+    st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     trust_command_center(portfolio, mandates, orders, saves, evo)
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
@@ -1327,6 +1391,9 @@ def main() -> None:
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     trade_log()
     prediction_panel()
+
+    st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
+    loop_state_panel()
 
     if auto:
         import time

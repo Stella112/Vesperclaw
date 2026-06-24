@@ -94,6 +94,11 @@ def run_cycle(engine: PaperEngine, symbols: list[str],
     evolution.reconcile_vault_saves(price_map)
     engine.mark_prices(price_map)
     engine.save()
+    try:
+        from vesperclaw import loop_state
+        loop_state.write_loop_state()
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"loop state skipped: {e}")
 
     # refresh the accountability briefing periodically (keeps LLM cost low)
     if engine.state["cycle"] % config.BRIEFING_EVERY_CYCLES == 0:
@@ -181,7 +186,7 @@ def _reset_state() -> None:
                  config.EVOLUTION_FILE, config.WEIGHTS_FILE, config.VAULT_SAVES_FILE,
                  config.TRADE_LOG_CSV, config.PRED_PORTFOLIO_FILE,
                  config.PRED_MANDATES_FILE, config.PRED_ORDERS_FILE,
-                 config.PRED_TRADE_LOG_CSV):
+                 config.PRED_TRADE_LOG_CSV, config.LOOP_STATE_FILE):
         if os.path.exists(path):
             os.remove(path)
     logger.info("State reset.")

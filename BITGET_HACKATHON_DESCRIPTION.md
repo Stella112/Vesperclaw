@@ -1,6 +1,6 @@
 # VesperClaw - Bitget AI Base Camp Hackathon Description
 
-VesperClaw is an accountable AI paper-trading agent built for the Bitget AI Base Camp Hackathon S1, Track 1: Trading Agent. It is designed around a simple idea: a trading agent should explain not only the trades it takes, but also the trades it refuses.
+VesperClaw is an accountable, loop-engineered AI paper-trading agent built for the Bitget AI Base Camp Hackathon S1, Track 1: Trading Agent. It is designed around a simple idea: a trading agent should explain not only the trades it takes, but also the trades it refuses.
 
 Most trading dashboards lead with a PnL curve. VesperClaw leads with an audit trail. Every cycle produces a market snapshot, a reasoned Signal Mandate, a thesis, a counterargument, an AgentVault risk decision, paper execution records, and post-trade learning. The dashboard turns that trail into a glass-box trading terminal where judges can inspect the agent's reasoning, risk discipline, and self-evaluation.
 
@@ -36,13 +36,15 @@ The Market Snapshot reads Bitget market data through public feeds and computes i
 
 The Regime Referee classifies the market as `trend_up`, `trend_down`, `range`, or `uncertain`. That regime determines which strategy should lead and how confident the agent must be before acting.
 
-The Qwen Analyst Council produces the reasoning layer. Specialized agent roles evaluate trend, mean reversion, risk, sentiment, and allocation. The mandate records both the bullish or bearish thesis and the strongest counterargument, so the decision is not a one-sided justification.
+The Qwen Analyst Council is the maker loop. Specialized agent roles evaluate trend, mean reversion, risk, sentiment, and allocation. The mandate records both the bullish or bearish thesis and the strongest counterargument, so the decision is not a one-sided justification.
 
-AgentVault is the risk firewall. It can approve, downsize, delay, or reject trades based on position sizing, drawdown, daily loss, volatility, cooldowns, open-position limits, risk/reward, and portfolio exposure across correlated assets.
+AgentVault is the checker loop. It can approve, downsize, delay, or reject trades based on position sizing, drawdown, daily loss, volatility, cooldowns, open-position limits, risk/reward, and portfolio exposure across correlated assets.
 
 The Paper Engine simulates fills and exits, then writes a CSV trade log and JSON audit records. No real capital is used by default.
 
 The Evolution Engine updates per-regime strategy weights only after trades close. Learning is deliberately conservative: it requires minimum samples, caps weight changes, and keeps a floor so a noisy sample cannot erase an agent role.
+
+The loop also writes `LOOP_STATE.md`, a human-readable state file generated from the JSON audit trail. This makes the agent's current memory inspectable without trusting a black-box claim.
 
 ## Current Capabilities
 
@@ -58,6 +60,7 @@ VesperClaw currently supports:
 - Vault Saves, which score blocked trades after the fact.
 - Conviction Ledger, which compares taken trades against refused trades.
 - Close-based per-regime learning.
+- Loop Map and `LOOP_STATE.md` memory, showing Perceive, Propose, Verify, Execute, Monitor, and Learn as inspectable stages.
 - Natural-language contract trading, where a user can describe a perpetuals style and the system compiles validated settings for symbols, leverage, confidence, sizing, and exposure without bypassing AgentVault.
 - Prediction-market paper mode for Polymarket-style probability trades, including football/soccer/NFL markets, with a 90% target gate that trades only when edge and confidence clear strict thresholds and reports observed accuracy from closed outcomes.
 - A Streamlit glass-box dashboard for demo and review.
@@ -70,6 +73,8 @@ The upgraded dashboard presents VesperClaw as a trading terminal rather than a d
 Below that, the dashboard surfaces:
 
 - Key performance metrics.
+- A Loop Map showing the six self-checking stages.
+- A `LOOP_STATE.md` preview/download generated from live audit files.
 - The Conviction Ledger for taken and refused trades.
 - The agent's self-briefing.
 - A market scanner showing the latest decision per asset.
