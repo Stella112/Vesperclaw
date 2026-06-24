@@ -30,6 +30,11 @@ from vesperclaw import store
 from vesperclaw.llm_client import get_client
 
 GAMMA_URL = "https://gamma-api.polymarket.com/markets"
+FOOTBALL_TERMS = (
+    "football", "soccer", "premier league", "champions league", "europa league",
+    "world cup", "euro ", "uefa", "fifa", "epl", "la liga", "serie a",
+    "bundesliga", "nfl", "super bowl", "college football",
+)
 
 
 def _now() -> str:
@@ -54,19 +59,47 @@ def _parse_yes_price(raw: Any) -> float | None:
     return None
 
 
+def _market_blob(market: dict[str, Any]) -> str:
+    parts = [
+        str(market.get("question", "")),
+        str(market.get("slug", "")),
+        str(market.get("category", "")),
+        str(market.get("description", "")),
+    ]
+    tags = market.get("tags") or []
+    if isinstance(tags, list):
+        for tag in tags:
+            if isinstance(tag, dict):
+                parts.append(str(tag.get("label") or tag.get("name") or tag.get("slug") or ""))
+            else:
+                parts.append(str(tag))
+    return " ".join(parts).lower()
+
+
+def market_topic(market: dict[str, Any]) -> str:
+    blob = _market_blob(market)
+    return "football" if any(term in blob for term in FOOTBALL_TERMS) else "general"
+
+
 # ── market data ──────────────────────────────────────────────────────────
 
-def fetch_markets(limit: int) -> list[dict[str, Any]]:
-    """Return liquid binary markets: {id, question, yes_price, volume}."""
+def fetch_markets(limit: int, topic: str = "general") -> list[dict[str, Any]]:
+    """Return liquid binary markets: {id, question, yes_price, volume, topic}."""
+    if limit <= 0:
+        return []
     try:
+        fetch_limit = limit * 3 if topic == "general" else max(limit * 25, 80)
         r = requests.get(
             GAMMA_URL,
             params={"closed": "false", "active": "true", "order": "volume",
-                    "ascending": "false", "limit": limit * 3},
+                    "ascending": "false", "limit": fetch_limit},
             timeout=10,
         )
         out = []
         for m in r.json():
+            detected_topic = market_topic(m)
+            if topic != "general" and detected_topic != topic:
+                continue
             yes = _parse_yes_price(m.get("outcomePrices"))
             if yes is None:
                 continue
@@ -76,15 +109,31 @@ def fetch_markets(limit: int) -> list[dict[str, Any]]:
                     "question": m.get("question", "")[:140],
                     "yes_price": round(yes, 3),
                     "volume": float(m.get("volume") or 0),
+                    "topic": detected_topic,
                 })
             if len(out) >= limit:
                 break
         if out:
-            logger.info(f"Polymarket: {len(out)} live markets fetched.")
+            logger.info(f"Polymarket: {len(out)} live {topic} markets fetched.")
             return out
     except Exception as e:  # noqa: BLE001
-        logger.warning(f"Polymarket fetch failed ({e}); using synthetic markets.")
-    return _synthetic_markets(limit)
+        logger.warning(f"Polymarket {topic} fetch failed ({e}); using synthetic markets.")
+    return _synthetic_markets(limit, topic=topic)
+
+
+def fetch_prediction_universe() -> list[dict[str, Any]]:
+    markets = fetch_markets(config.PRED_MARKETS, topic="general")
+    if config.PRED_INCLUDE_FOOTBALL and config.PRED_FOOTBALL_MARKETS > 0:
+        markets.extend(fetch_markets(config.PRED_FOOTBALL_MARKETS, topic="football"))
+
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for market in markets:
+        if market["id"] in seen:
+            continue
+        seen.add(market["id"])
+        unique.append(market)
+    return unique
 
 
 def fetch_market_yes(market_id: str) -> float | None:
@@ -100,10 +149,10 @@ def fetch_market_yes(market_id: str) -> float | None:
         return None
 
 
-def _synthetic_markets(limit: int) -> list[dict[str, Any]]:
+def _synthetic_markets(limit: int, topic: str = "general") -> list[dict[str, Any]]:
     import numpy as np
     rng = np.random.default_rng(int(time.time()) % 9999)
-    qs = [
+    general_qs = [
         "Will BTC close above $80k this month?",
         "Will the Fed cut rates at the next meeting?",
         "Will ETH flip its prior all-time high this quarter?",
@@ -113,10 +162,19 @@ def _synthetic_markets(limit: int) -> list[dict[str, Any]]:
         "Will a major exchange list this memecoin this week?",
         "Will gas fees on Ethereum spike above 100 gwei this week?",
     ]
+    football_qs = [
+        "Will Arsenal win their next Premier League match?",
+        "Will Real Madrid win their next Champions League match?",
+        "Will an NFL team score 30+ points in the next featured game?",
+        "Will both teams score in the next major football final?",
+        "Will the favorite win the next listed football market?",
+        "Will a Premier League match finish with over 2.5 goals?",
+    ]
+    qs = football_qs if topic == "football" else general_qs
     return [
-        {"id": f"SYN-{i}", "question": qs[i % len(qs)],
+        {"id": f"SYN-{topic.upper()}-{i}", "question": qs[i % len(qs)],
          "yes_price": round(float(rng.uniform(0.2, 0.8)), 3),
-         "volume": float(rng.uniform(1e4, 1e6))}
+         "volume": float(rng.uniform(1e4, 1e6)), "topic": topic}
         for i in range(min(limit, len(qs)))
     ]
 
@@ -131,7 +189,7 @@ PROB_SYS = (
 )
 
 
-def estimate_probability(question: str, market_yes: float) -> dict[str, Any]:
+def estimate_probability(question: str, market_yes: float, topic: str = "general") -> dict[str, Any]:
     """Return {prob, confidence, thesis, counterargument}. Falls back to no-edge."""
     client = get_client()
     fallback = {
@@ -140,8 +198,11 @@ def estimate_probability(question: str, market_yes: float) -> dict[str, Any]:
         "counterargument": "Market price already aggregates available information.",
     }
     user = (
+        f"Market topic: {topic}\n"
         f"Market question: {question}\n"
         f"Market-implied P(YES) = {market_yes:.2f}\n"
+        "If this is football/soccer/NFL, be extra calibrated: sports lines are efficient, "
+        "so only claim edge when the question has a clear base-rate or market-pricing reason.\n"
         f'Respond ONLY with JSON: {{"prob":0.0-1.0,"confidence":0.0-1.0,'
         f'"thesis":"one sentence on your estimate","counterargument":"one sentence on the main risk"}}'
     )
@@ -171,6 +232,7 @@ class PredPosition:
     confidence: float = 0.0
     edge: float = 0.0
     mandate_id: str = ""
+    topic: str = "general"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -275,13 +337,13 @@ class PredEngine:
             entry_yes=yes, stake=stake, target_yes=round(target, 3), stop_yes=round(stop, 3),
             entry_cycle=self.state["cycle"], entry_time=_now(), est_prob=est["prob"],
             confidence=est.get("confidence", 0.0), edge=est.get("edge", est["prob"] - yes),
-            mandate_id=mandate_id,
+            mandate_id=mandate_id, topic=market.get("topic", "general"),
         )
         self.state["open_positions"].append(pos.to_dict())
         self.state["last_yes"][market["id"]] = yes
         store.append_trade_log_to(config.PRED_TRADE_LOG_CSV, {
             "timestamp": pos.entry_time, "mandate_id": mandate_id, "market": pos.question,
-            "side": side, "event": "OPEN", "yes_price": yes, "stake": stake,
+            "topic": pos.topic, "side": side, "event": "OPEN", "yes_price": yes, "stake": stake,
             "est_prob": est["prob"], "confidence": pos.confidence, "edge": pos.edge, "pnl": 0.0,
         })
         logger.info(f"PRED OPEN {side} @ {yes} (est {est['prob']:.2f}) — {pos.question[:60]}")
@@ -328,7 +390,8 @@ class PredEngine:
         self.state["wins"] += int(win)
         self.state["losses"] += int(not win)
         rec = {
-            "mandate_id": p.mandate_id, "market_id": p.market_id, "question": p.question, "side": p.side,
+            "mandate_id": p.mandate_id, "market_id": p.market_id, "topic": p.topic,
+            "question": p.question, "side": p.side,
             "entry_yes": p.entry_yes, "exit_yes": yes, "stake": p.stake,
             "pnl": pnl, "pnl_pct": round(pnl / p.stake * 100, 2) if p.stake else 0,
             "reason": reason, "est_prob": p.est_prob, "confidence": p.confidence,
@@ -337,7 +400,7 @@ class PredEngine:
         store.append_json_list(config.PRED_ORDERS_FILE, rec, cap=1000)
         store.append_trade_log_to(config.PRED_TRADE_LOG_CSV, {
             "timestamp": rec["exit_time"], "mandate_id": p.mandate_id, "market": p.question,
-            "side": p.side, "event": f"CLOSE_{reason.upper()}", "yes_price": yes,
+            "topic": p.topic, "side": p.side, "event": f"CLOSE_{reason.upper()}", "yes_price": yes,
             "stake": p.stake, "est_prob": p.est_prob, "confidence": p.confidence,
             "edge": p.edge, "pnl": pnl,
         })
@@ -356,7 +419,7 @@ class PredEngine:
 
 def run_cycle(engine: PredEngine) -> None:
     engine.state["cycle"] += 1
-    markets = fetch_markets(config.PRED_MARKETS)
+    markets = fetch_prediction_universe()
     # exits first (re-price held markets from the fresh fetch)
     prices = {m["id"]: m["yes_price"] for m in markets}
     for market_id in engine.held_market_ids() - set(prices):
@@ -369,7 +432,7 @@ def run_cycle(engine: PredEngine) -> None:
     for m in markets:
         if m["id"] in held or len(engine.state["open_positions"]) >= config.PRED_MAX_POSITIONS:
             continue
-        est = estimate_probability(m["question"], m["yes_price"])
+        est = estimate_probability(m["question"], m["yes_price"], topic=m.get("topic", "general"))
         edge = est["prob"] - m["yes_price"]
         est["edge"] = edge
         side = "YES" if edge > 0 else "NO"
@@ -381,6 +444,7 @@ def run_cycle(engine: PredEngine) -> None:
         record = {
             "mandate_id": f"PM-{datetime.now(timezone.utc):%Y-%m-%d}-{seq:04d}",
             "timestamp": _now(), "market": m["question"], "market_id": m["id"],
+            "topic": m.get("topic", "general"),
             "yes_price": m["yes_price"], "est_prob": round(est["prob"], 3),
             "edge": round(edge, 3), "side": side, "action": f"BUY_{side}" if decision == "APPROVED" else "NO_TRADE",
             "confidence": est["confidence"], "thesis": est["thesis"],
@@ -410,7 +474,7 @@ def run(cycles: int | None, interval: int = 0) -> None:
     store.ensure_dirs()
     engine = PredEngine()
     logger.info(f"VesperClaw PREDICTION mode | provider={config.LLM_PROVIDER} "
-                f"markets={config.PRED_MARKETS}")
+                f"markets={config.PRED_MARKETS} football={config.PRED_FOOTBALL_MARKETS if config.PRED_INCLUDE_FOOTBALL else 0}")
     n = 0
     while True:
         run_cycle(engine)

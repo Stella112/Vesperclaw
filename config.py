@@ -129,6 +129,8 @@ PRED_STOP_BAND = float(os.getenv("PRED_STOP_BAND", "0.06"))   # YES-price stop d
 PRED_TIMEOUT_BARS = int(os.getenv("PRED_TIMEOUT_BARS", "10"))
 PRED_INITIAL_BALANCE = float(os.getenv("PRED_INITIAL_BALANCE", "10000"))
 PRED_MARKETS = int(os.getenv("PRED_MARKETS", "8"))            # markets scanned per cycle
+PRED_INCLUDE_FOOTBALL = os.getenv("PRED_INCLUDE_FOOTBALL", "true").lower() == "true"
+PRED_FOOTBALL_MARKETS = int(os.getenv("PRED_FOOTBALL_MARKETS", "4"))
 
 
 # ── Storage ───────────────────────────────────────────────────────────

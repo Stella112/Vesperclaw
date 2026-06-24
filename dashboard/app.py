@@ -1071,6 +1071,8 @@ def prediction_panel() -> None:
     rejected = sum(1 for m in mandates if m.get("vault", {}).get("decision") == "REJECTED")
     total_seen = approved + rejected
     approve_rate = (approved / total_seen * 100) if total_seen else 0.0
+    football_seen = sum(1 for m in mandates if m.get("topic") == "football")
+    football_open = sum(1 for p in pf.get("open_positions", []) if p.get("topic") == "football")
 
     st.markdown(
         f"""
@@ -1083,16 +1085,18 @@ def prediction_panel() -> None:
         unsafe_allow_html=True,
     )
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Prediction equity", f"${eq:,.2f}", f"{(eq / config.PRED_INITIAL_BALANCE - 1) * 100:+.2f}%")
     c2.metric("Prediction PnL", f"${pred_pnl:+,.2f}")
     c3.metric("Observed accuracy", f"{accuracy:.1f}%", f"target {config.PRED_TARGET_ACCURACY:.0%}")
     c4.metric("Closed / Open", f"{closed} / {len(pf.get('open_positions', []))}")
     c5.metric("Approved rate", f"{approve_rate:.1f}%", f"{rejected} refused")
+    c6.metric("Football markets", football_seen, f"{football_open} open")
 
     if mandates:
         rows = [
             {
+                "topic": m.get("topic", "general"),
                 "market": m["market"][:70],
                 "yes": m.get("yes_price"),
                 "estimate": m.get("est_prob"),
@@ -1121,6 +1125,7 @@ def prediction_panel() -> None:
         st.markdown("#### Open Prediction Positions")
         open_rows = [
             {
+                "topic": p.get("topic", "general"),
                 "market": p.get("question", "")[:70],
                 "side": p.get("side"),
                 "entry_yes": p.get("entry_yes"),
@@ -1138,6 +1143,7 @@ def prediction_panel() -> None:
         st.markdown("#### Closed Prediction Outcomes")
         closed_rows = [
             {
+                "topic": o.get("topic", "general"),
                 "market": o.get("question", "")[:70],
                 "side": o.get("side"),
                 "entry_yes": o.get("entry_yes"),
