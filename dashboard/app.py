@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
 from vesperclaw import briefing as briefing_mod  # noqa: E402
-from vesperclaw import agent_hub, evolution, loop_state, store, vibe  # noqa: E402
+from vesperclaw import agent_hub, evolution, loop_state, meme_radar, store, vibe  # noqa: E402
 
 st.set_page_config(page_title="VesperClaw | Bitget Agent", page_icon=":chart_with_upwards_trend:", layout="wide")
 
@@ -263,6 +263,27 @@ def apply_css() -> None:
             color: #dce8ff;
         }
 
+        .vc-verdict {
+            border: 1px solid rgba(34, 211, 238, 0.20);
+            border-left: 4px solid var(--verdict-color);
+            border-radius: 8px;
+            padding: 16px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(7, 11, 18, 0.92));
+        }
+
+        .vc-verdict-title {
+            color: var(--vc-text);
+            font-size: 1.35rem;
+            font-weight: 850;
+            margin-bottom: 4px;
+        }
+
+        .vc-list {
+            margin: 8px 0 0 0;
+            padding-left: 18px;
+            color: #b7c6e4;
+        }
+
         .vc-score-card {
             border: 1px solid rgba(32, 227, 178, 0.24);
             border-radius: 8px;
@@ -426,6 +447,27 @@ def profit_guard_summary(portfolio: dict) -> dict[str, Any]:
     }
 
 
+def compact_usd(value: Any) -> str:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    abs_num = abs(num)
+    if abs_num >= 1_000_000_000:
+        return f"${num / 1_000_000_000:.2f}B"
+    if abs_num >= 1_000_000:
+        return f"${num / 1_000_000:.2f}M"
+    if abs_num >= 1_000:
+        return f"${num / 1_000:.1f}K"
+    return f"${num:,.2f}"
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def cached_meme_scan(query: str, guard_active: bool, guard_reason: str) -> dict[str, Any]:
+    guard = {"active": guard_active, "reason": guard_reason}
+    return meme_radar.analyze(query=query, guard=guard)
+
+
 def latest_vault_decision(mandates: list[dict]) -> str:
     for mandate in reversed(mandates):
         decision = mandate.get("vault", {}).get("decision")
@@ -566,6 +608,140 @@ def profit_guard_panel(portfolio: dict) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def meme_radar_panel(portfolio: dict) -> None:
+    st.markdown("### Meme Radar")
+    st.markdown(
+        """
+        <div class="vc-callout">
+            Search a meme coin ticker or name. VesperClaw checks trending status,
+            liquidity, market-cap floor, momentum, volatility, and the current
+            Profit Guard state before returning a buy/watch/avoid verdict.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+
+    guard = profit_guard_summary(portfolio)
+    left, right = st.columns([2.2, 0.8])
+    with left:
+        query = st.text_input(
+            "Meme coin search",
+            value="",
+            placeholder="Try PEPE, WIF, BONK, DOGE, SHIB...",
+        )
+    with right:
+        st.caption("Source: CoinGecko public market/trending data")
+        scan_clicked = st.button("Scan Meme Coin", use_container_width=True)
+
+    query = query.strip()
+    should_scan = scan_clicked or bool(query)
+    if not should_scan:
+        st.caption("Showing the current meme-token watchlist until you search.")
+
+    with st.spinner("VesperClaw is checking liquidity, momentum, and risk gates..."):
+        result = cached_meme_scan(query, bool(guard["active"]), str(guard["reason"]))
+
+    if not result.get("ok"):
+        st.warning(result.get("error", "Meme Radar is unavailable right now."))
+        return
+
+    selected = result.get("selected", {})
+    verdict = selected.get("verdict", "WATCH")
+    verdict_color = {
+        "BUY CANDIDATE": "#20e3b2",
+        "WATCH": "#ffd166",
+        "AVOID": "#ff5470",
+    }.get(verdict, "#8b98b8")
+    name = selected.get("name") or "Unknown"
+    symbol = selected.get("symbol") or "n/a"
+    score = selected.get("score", 0)
+    price = selected.get("price")
+    price_text = f"${float(price):,.8f}" if isinstance(price, (int, float)) and price < 1 else compact_usd(price)
+    positives = "".join(f"<li>{safe_text(item)}</li>" for item in selected.get("positives", []))
+    warnings = "".join(f"<li>{safe_text(item)}</li>" for item in selected.get("warnings", []))
+    if not positives:
+        positives = "<li>No strong positive gate fired yet.</li>"
+    if not warnings:
+        warnings = "<li>No major red flag detected by the scanner.</li>"
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Radar score", f"{score:.1f}/100")
+    c2.metric("Verdict", verdict)
+    c3.metric("Market cap", compact_usd(selected.get("market_cap")))
+    c4.metric("24h volume", compact_usd(selected.get("volume")))
+    c5.metric("24h move", pct(selected.get("change_24h")))
+
+    guard_note = selected.get("guard_note", "")
+    st.markdown(
+        f"""
+        <div class="vc-verdict" style="--verdict-color:{verdict_color};">
+            <div class="vc-verdict-title">{safe_text(verdict)} - {safe_text(name)} ({safe_text(symbol)})</div>
+            <div class="vc-caption">
+                Price {safe_text(price_text)} | 1h {pct(selected.get('change_1h'))} |
+                7d {pct(selected.get('change_7d'))} |
+                Volume/MCap {_as_percent(selected.get('vol_to_cap'))}
+            </div>
+            <div class="vc-ledger-stat">
+                <div class="vc-mini"><span>Why it can work</span><ul class="vc-list">{positives}</ul></div>
+                <div class="vc-mini"><span>Why it can fail</span><ul class="vc-list">{warnings}</ul></div>
+                <div class="vc-mini"><span>Execution stance</span><strong>{safe_text(_meme_execution_stance(verdict, guard_note))}</strong></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    candidates = result.get("candidates", [])
+    if candidates:
+        rows = [
+            {
+                "coin": f"{row.get('name')} ({row.get('symbol')})",
+                "verdict": row.get("verdict"),
+                "score": row.get("score"),
+                "price": row.get("price"),
+                "market_cap": row.get("market_cap"),
+                "volume": row.get("volume"),
+                "1h": row.get("change_1h"),
+                "24h": row.get("change_24h"),
+                "7d": row.get("change_7d"),
+            }
+            for row in candidates
+        ]
+        st.markdown("#### Meme Watchlist")
+        st.dataframe(
+            pd.DataFrame(rows),
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "score": st.column_config.ProgressColumn("score", min_value=0, max_value=100),
+                "price": st.column_config.NumberColumn("price", format="$%.8f"),
+                "market_cap": st.column_config.NumberColumn("market cap", format="$%.0f"),
+                "volume": st.column_config.NumberColumn("24h volume", format="$%.0f"),
+                "1h": st.column_config.NumberColumn("1h %", format="%+.2f%%"),
+                "24h": st.column_config.NumberColumn("24h %", format="%+.2f%%"),
+                "7d": st.column_config.NumberColumn("7d %", format="%+.2f%%"),
+            },
+        )
+
+
+def _as_percent(value: Any) -> str:
+    try:
+        return f"{float(value) * 100:.2f}%"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _meme_execution_stance(verdict: str, guard_note: str = "") -> str:
+    if guard_note:
+        return guard_note
+    if verdict == "BUY CANDIDATE":
+        return "Paper-buy candidate only; small size, tight invalidation."
+    if verdict == "WATCH":
+        return "Wait for cleaner liquidity/momentum confirmation."
+    return "No buy; risk gates are not paying for the upside."
 
 
 def loop_map_panel(portfolio: dict, mandates: list[dict], orders: list[dict], evo: list[dict]) -> None:
@@ -1393,6 +1569,9 @@ def main() -> None:
     kpi_strip(portfolio)
     st.write("")
     profit_guard_panel(portfolio)
+
+    st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
+    meme_radar_panel(portfolio)
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     loop_map_panel(portfolio, mandates, orders, evo)

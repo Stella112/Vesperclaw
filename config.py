@@ -33,6 +33,17 @@ REAL_TRADING_ENABLED = os.getenv("REAL_TRADING_ENABLED", "false").lower() == "tr
 CRYPTOPANIC_TOKEN = os.getenv("CRYPTOPANIC_TOKEN", "")
 USE_SENTIMENT = os.getenv("USE_SENTIMENT", "true").lower() == "true"
 
+# Meme Radar: keyless CoinGecko scanner for judge/user-entered meme coins.
+# It is a recommendation gate only; it never places orders.
+MEME_RADAR_ENABLED = os.getenv("MEME_RADAR_ENABLED", "true").lower() == "true"
+MEME_RADAR_API_BASE = os.getenv("MEME_RADAR_API_BASE", "https://api.coingecko.com/api/v3")
+MEME_RADAR_API_KEY = os.getenv("MEME_RADAR_API_KEY", "")
+MEME_RADAR_MIN_SCORE = float(os.getenv("MEME_RADAR_MIN_SCORE", "75"))
+MEME_RADAR_WATCH_SCORE = float(os.getenv("MEME_RADAR_WATCH_SCORE", "55"))
+MEME_RADAR_MIN_VOLUME_USD = float(os.getenv("MEME_RADAR_MIN_VOLUME_USD", "1000000"))
+MEME_RADAR_MIN_MARKET_CAP_USD = float(os.getenv("MEME_RADAR_MIN_MARKET_CAP_USD", "10000000"))
+MEME_RADAR_FILE = os.getenv("MEME_RADAR_FILE", f"{os.getenv('DATA_DIR', 'data')}/meme_radar.json")
+
 
 # ── Trading config ────────────────────────────────────────────────────
 SYMBOL = os.getenv("SYMBOL", "BTC/USDT")
