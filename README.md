@@ -1,265 +1,294 @@
-# 🦅 VesperClaw — the accountable trading agent
+# VesperClaw
 
-**VesperClaw is a loop-engineered paper-trading agent: it perceives markets, proposes trades, verifies them through a checker, executes only approved paper orders, monitors risk, and writes lessons back to memory.**
+**An accountable Bitget paper-trading agent for AI Base Camp Hackathon S1, Track 1.**
 
-Built for the **Bitget AI Base Camp Hackathon S1 — Track 1 (Trading Agent)**.
-Qwen-powered. Paper-mode only, no real capital.
+VesperClaw is a closed-loop trading agent that scans crypto markets, writes a trade thesis, checks every decision through a deterministic risk firewall, executes only approved paper trades, and records what happened next.
 
-🔴 **Live demo (running 24/7):** http://38.49.209.149:8501
+The project is not presented as a magic profit machine. Its edge is **accountable autonomy**: every trade, refusal, risk check, and post-trade lesson is inspectable.
 
----
+## Live Links
 
-## The wow: loop-engineered accountability
+| Material | Link |
+|---|---|
+| MuleRun demo page | https://zgzcjrl6.mule.page/#firewall |
+| Live dashboard | http://38.49.209.149:8501/ |
+| Paper trading log | [`samples/trade_log.csv`](samples/trade_log.csv) |
+| Prediction-market paper log | [`samples/pred_trade_log.csv`](samples/pred_trade_log.csv) |
+| Sample mandates and outputs | [`samples/`](samples/) |
 
-Most AI trading demos prompt an LLM for a trade. VesperClaw runs a self-checking loop.
+## Why VesperClaw Exists
 
-Every trading bot shows a P&L line. **Very few show the trades they refused — and prove the refusal saved money.** VesperClaw does:
+Most trading agents show the final trade and hide the process. VesperClaw shows the process first.
 
-- It logs **every refused trade**, then watches the market and scores it: a **`good_block`** if price later hit the stop it avoided, a **`bad_block`** if it would have won.
-- The dashboard's **Conviction Ledger** puts *Taken* and *Refused* side by side, with a running headline like *"7/9 refusals were correct — avg 1.8% adverse move avoided."*
-- The agent then **files a plain-English self-briefing**: what it traded, what it refused, whether it was right, and one thing it would do better.
+Every cycle produces:
 
-That's the AI-native part: not a single prompt, but a loop that is **answerable for every action and every inaction.**
+- a market snapshot,
+- a proposed mandate,
+- a thesis and counterargument,
+- an Alpha Gate quality check,
+- an AgentVault risk decision,
+- a paper fill or refusal,
+- a post-trade record.
 
-## How it earns that
+This makes the agent judgeable. A reviewer can ask: did it trade for a reason, did it refuse for a reason, and did the risk system protect capital when the signal was weak?
 
-Under the hood, every action flows through an auditable lifecycle:
+## Strategy Logic
 
-```
-perceive → reason (with a counterargument) → risk-gate → execute → record → self-evaluate
-```
+VesperClaw currently scans a crypto basket:
 
-You can replay each decision: the thesis *and its strongest counterargument*, the firewall's reasoned approve/refuse, the close, and how outcomes reshaped the agent's per-regime strategy weights. The Conviction Ledger and self-briefing sit on top of this trail.
+- `BTC/USDT`
+- `ETH/USDT`
+- `SOL/USDT`
 
----
+The agent uses technical and market-state signals including:
 
-## The loop
+- EMA trend direction,
+- RSI,
+- ATR,
+- Bollinger Bands,
+- ADX trend strength,
+- volume behavior,
+- higher-timeframe confirmation,
+- funding and market context,
+- Fear & Greed / news-sentiment lanes where available.
 
-Loop-engineered view:
+The decision engine turns those signals into a structured mandate:
 
 ```text
-Perceive -> Propose -> Verify -> Execute -> Monitor -> Learn -> Write Memory -> Repeat
+symbol -> side -> confidence -> thesis -> counterargument -> stop -> target -> size
 ```
 
+Then the mandate must survive two safety layers before any paper trade is opened.
+
+## Safety Architecture
+
+### 1. Alpha Gate
+
+Alpha Gate is the quality filter before risk execution. It blocks weak entries unless the setup has enough trend and confirmation.
+
+It checks:
+
+- trend-only mode,
+- 1-hour higher-timeframe confirmation,
+- minimum ADX,
+- no falling-volume entries,
+- no overextended RSI chases,
+- direction not fighting recent movement.
+
+SOL remains in the basket, but it must pass the same gate as BTC and ETH.
+
+### 2. AgentVault
+
+AgentVault is the deterministic risk firewall. It can approve, downsize, delay, or reject a mandate.
+
+It checks:
+
+- symbol allowlist,
+- confidence floor,
+- leverage,
+- requested position size,
+- portfolio exposure,
+- open-position limits,
+- drawdown,
+- daily loss,
+- cooldown,
+- volatility regime,
+- minimum risk/reward.
+
+Rejected trades are logged instead of silently ignored.
+
+### 3. Profit Guard
+
+Profit Guard protects capital after losses. When active, it raises the confidence bar, reduces size, blocks choppy regimes, and can lock new entries when drawdown or daily loss limits are hit.
+
+## Agent Loop
+
+```text
+Perceive -> Propose -> Verify -> Execute -> Monitor -> Learn -> Repeat
 ```
-Bitget market data (multi-asset basket: BTC, ETH, SOL, …)
-  → Market Snapshot        (ADX, EMA, RSI, Bollinger, ATR + funding/OI
-                            + Fear&Greed / news sentiment)
-  → Regime Referee         (ADX decides which strategy may lead)
-  → Qwen Analyst Council   (Trend / Mean-Reversion / Risk / Sentiment / Allocator
-                            + adversarial debate)
-  → Signal Mandate         (action, confidence, SL/TP, thesis, counterargument, votes)
-  → AgentVault             (APPROVED / DOWNSIZED / REJECTED / DELAYED;
-                            per-symbol + portfolio-wide limits)
-  → Paper Execution        (simulated fills + CSV trade log)
-  → Close (TP / SL / timeout)
-  → Evolution Engine       (per-regime weight learning, close-based)
-  → next cycle (scans the whole basket)
+
+| Stage | What happens |
+|---|---|
+| Perceive | Pull market data and build indicator snapshots |
+| Propose | Generate a mandate with thesis and counterargument |
+| Verify | Alpha Gate and AgentVault check the mandate |
+| Execute | Approved trades enter the paper book |
+| Monitor | Positions are marked to market and closed by stop, target, or timeout |
+| Learn | Closed outcomes and refused trades update the audit trail |
+
+## Extra Agent Surfaces
+
+### Meme Radar
+
+The dashboard includes a meme-coin search tool. A user can search a ticker or name, and VesperClaw returns:
+
+- `BUY CANDIDATE`
+- `WATCH`
+- `AVOID`
+
+The score uses liquidity, market cap, volume, momentum, volatility, trending status, and the current Profit Guard state. It is analysis-only and never auto-executes.
+
+### Prediction Markets
+
+VesperClaw also has a paper prediction-market lane. It scans football and World Cup markets, estimates probability, compares it with market-implied odds, and only paper-trades when the edge and confidence clear the gate.
+
+This is separate from crypto execution and is used to show the same agent discipline in probability markets.
+
+## Bitget Agent Hub
+
+VesperClaw includes a Bitget Agent Hub readiness adapter.
+
+It surfaces:
+
+- official Agent Hub / CLI readiness,
+- API credential readiness,
+- paper-only safety mode,
+- Skill Hub lanes for macro, market intel, news, sentiment, and technical analysis.
+
+Real trading is disabled by default:
+
+```text
+REAL_TRADING_ENABLED=false
 ```
 
-The agent **scans a basket of symbols every cycle**, detects each one's regime
-independently, and can hold concurrent positions across assets under a
-portfolio-wide risk cap. Perception fuses price, positioning (funding/OI), and
-**crowd sentiment** (Fear & Greed plus keyless GDELT headlines, public crypto
-RSS fallback, and optional CryptoPanic if a token is available) — the Sentiment
-agent applies contrarian caution (e.g. it won't chase shorts into Extreme Fear).
+The deployed demo uses read-only readiness and live-paper execution.
 
-### Regime referee
-| ADX | Regime | Leading strategy |
-|---|---|---|
-| ≥ 25, +DI ≥ −DI | `trend_up` | Trend Agent (EMA 9/21 crossover) |
-| ≥ 25, −DI > +DI | `trend_down` | Trend Agent (EMA 9/21 crossover) |
-| ≤ 20 | `range` | Mean-Reversion Agent (RSI + Bollinger) |
-| 20–25 | `uncertain` | No lead — higher confidence required or flat |
-| ATR% ≥ danger | any | Risk Agent can veto everything |
+## Proof Artifacts
 
-Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR** (R:R ≈ 1.67), position size scaled by confidence and capped by AgentVault.
+The hackathon-required paper log is available here:
 
----
+[`samples/trade_log.csv`](samples/trade_log.csv)
 
-## Key design choices (the upgrades that matter)
+It includes:
 
-- **Natural-language contract trading** — type a trading style such as
-  `"BTC/ETH perpetuals, high conviction only, max 3x, avoid chop"` and Qwen
-  compiles it into validated contract settings. The compiler can tune leverage,
-  symbols, confidence, sizing, and exposure, but it cannot bypass AgentVault.
-- **Loop Map + state memory** - the dashboard shows the six running loops
-  (Perceive, Propose, Verify, Execute, Monitor, Learn), and `data/LOOP_STATE.md`
-  summarizes the live agent memory in a human-readable form.
-- **Bitget Agent Hub adapter** - detects the official `bitget-hub` CLI/MCP readiness,
-  exposes the five Skill Hub lanes, and keeps execution paper-only unless
-  `REAL_TRADING_ENABLED=true` is explicitly set.
-- **Explainable mandates with a built-in counterargument** — every proposed trade records the thesis *and* the strongest case against it (adversarial pass).
-- **AgentVault risk firewall** — hard limits on size, daily loss, drawdown, volatility, cooldown, R:R, open positions. Returns a reasoned decision, never a silent block.
-- **Profit Guard mode** — after loss clusters or drawdown, VesperClaw pauses new entries, blocks choppy regimes, raises the confidence floor, caps position size, and can hard-lock new entries when drawdown/daily-loss brakes are hit.
-- **Alpha Gate** — new crypto entries must pass stricter profit filters: trend-only mode, 1h confirmation, minimum ADX, no falling-volume entries, and no overextended RSI chases. SOL remains in the basket, but it must clear the same gate as BTC and ETH.
-- **Meme Radar** — a user can search a trending meme coin ticker/name and VesperClaw returns a transparent BUY CANDIDATE / WATCH / AVOID verdict from trending status, liquidity, market cap, momentum, volatility, and current Profit Guard state. It is analysis-only and never auto-executes.
-- **World Cup prediction board** — the prediction lane now surfaces 2026 FIFA World Cup country-winner, player-prop/scorer, and match-prop markets first, so judges can inspect live sports probabilities even when the high-accuracy gate refuses to trade.
-- **Vault Saves** — when the firewall blocks/shrinks a trade, it later checks whether that block actually avoided a loss (`good_block` vs `bad_block`).
-- **Close-based, per-regime learning** — weights update only when a trade *closes*, learned independently per regime, with sample minimums, capped steps, and a weight floor so noise can't whipsaw the system.
-- **Deterministic ground truth + LLM judgment** — Python computes the entry signal (verifiable, reproducible); Qwen supplies confidence and the narrative. If the LLM is unavailable, the loop degrades to heuristics and keeps running.
-- **Multi-asset market scan** — every cycle the agent evaluates a basket (BTC, ETH, SOL, …), each with its own regime, holding concurrent positions under a portfolio-wide cap.
-- **Sentiment-aware perception** — fuses Fear & Greed and keyless GDELT/RSS news flow with price/positioning; optional CryptoPanic support is used first if a token is configured. The Sentiment agent applies contrarian caution at crowd extremes.
+- timestamp,
+- trading pair,
+- direction,
+- event,
+- price,
+- quantity,
+- notional,
+- fee,
+- balance before,
+- balance after,
+- PnL,
+- regime,
+- vault decision.
 
----
+Prediction-market paper logs are available here:
 
-## Quick start
+[`samples/pred_trade_log.csv`](samples/pred_trade_log.csv)
+
+Additional sample outputs are in [`samples/`](samples/).
+
+## Dashboard
+
+The live dashboard is designed as a judge-facing trading terminal.
+
+It shows:
+
+- equity,
+- paper PnL,
+- unrealized PnL,
+- closed trades,
+- win rate,
+- current cycle,
+- Alpha Gate status,
+- latest mandate,
+- Profit Guard state,
+- World Cup prediction board,
+- Meme Radar,
+- Bitget Agent Hub readiness,
+- Conviction Ledger,
+- AgentVault checks,
+- paper trade logs.
+
+Live dashboard:
+
+http://38.49.209.149:8501/
+
+## Quick Start
 
 ```bash
-# 1. install
 python -m venv .venv
-.venv/Scripts/activate          # Windows
-# source .venv/bin/activate     # Linux/macOS
+.venv/Scripts/activate
 pip install -r requirements.txt
+cp .env.example .env
+```
 
-# 2. configure
-cp .env.example .env            # then add your QWEN_API_KEY
+Run a fast local demo:
 
-# 3a. run a fast demo (replays 1-minute candles, full loop in minutes)
-python main.py --mode fast_demo --reset
-
-# 3b. or run offline with synthetic candles (no network, no keys)
+```bash
 python main.py --mode fast_demo --demo-data --reset
-
-# 3c. or run live paper mode (one cycle every 15 min)
-python main.py --mode live_paper
-
-# 4. watch the glass box
 streamlit run dashboard/app.py
 ```
 
-> **No Bitget API keys are required for paper mode** — market data is pulled from Bitget's public endpoints via `ccxt`. Add keys to `.env` only if you later want authenticated data.
+Run live-paper mode:
 
-> **Qwen** uses the hackathon OpenAI-compatible endpoint (`https://hackathon.bitgetops.com/v1`). Set `LLM_PROVIDER=claude` with an `ANTHROPIC_API_KEY` to use the fallback. With no key set, the agents run on deterministic heuristics.
+```bash
+python main.py --mode live_paper
+streamlit run dashboard/app.py
+```
 
----
+Paper mode can run without Bitget API keys using public market data. API keys are only needed for authenticated data or future real execution. Real trading remains off unless explicitly enabled.
 
 ## Configuration
 
-All tunables live in [`config.py`](config.py) and are overridable via `.env`. Highlights:
+Most settings are in [`config.py`](config.py) and can be overridden with `.env`.
 
-| Var | Default | Meaning |
-|---|---|---|
-| `LLM_PROVIDER` | `qwen` | `qwen` or `claude` |
-| `SYMBOL` | `BTC/USDT` | traded pair |
-| `RUN_MODE` | `fast_demo` | `fast_demo` or `live_paper` |
-| `INITIAL_BALANCE` | `10000` | starting paper equity |
-| `RISK_PER_TRADE` | `0.01` | base risk fraction |
-| `MAX_POSITION_SIZE_PCT` | `0.10` | vault size cap |
-| `MAX_DAILY_LOSS_PCT` | `0.05` | halt new trades after −5% day |
-| `MAX_DRAWDOWN_PCT` | `0.20` | lockdown after −20% from peak |
-| `BITGET_AGENT_HUB_ENABLED` | `true` | detect and surface official Bitget Agent Hub readiness |
-| `REAL_TRADING_ENABLED` | `false` | hard safety flag; real Bitget execution remains off by default |
-| `PROFIT_GUARD_LOSS_STREAK` | `2` | activate lockout after consecutive losses |
-| `PROFIT_GUARD_COOLDOWN_BARS` | `24` | pause duration after a loss cluster |
-| `PROFIT_GUARD_MAX_SIZE_PCT` | `0.035` | max new position size while guard is active |
-| `PRED_TARGET_ACCURACY` | `0.90` | prediction-market target shown on dashboard |
-| `PRED_MIN_CONFIDENCE` | `0.70` | minimum Probability Agent confidence before paper-trading |
-| `PRED_EDGE_THRESHOLD` | `0.10` | minimum odds gap vs. market-implied probability |
-| `PRED_INCLUDE_WORLD_CUP` | `true` | include a dedicated 2026 FIFA World Cup prediction lane |
-| `PRED_WORLD_CUP_MARKETS` | `6` | extra World Cup markets scanned per prediction cycle |
-| `PRED_INCLUDE_FOOTBALL` | `true` | include football/soccer/NFL prediction markets |
-| `PRED_FOOTBALL_MARKETS` | `4` | extra football markets scanned per prediction cycle |
-
----
-
-## What gets written (the audit trail)
-
-| File | Contents |
+| Variable | Purpose |
 |---|---|
-| `data/trade_log.csv` | **Required submission artifact** — every fill: timestamp, pair, direction, price, qty, balance change, PnL, mandate id |
-| `data/mandates.json` | full Signal Mandates + vault decisions per cycle |
-| `data/orders.json` | closed-trade records |
-| `data/weights.json` | learned per-regime weights + stats |
-| `data/evolution.json` | human-readable weight-change log |
-| `data/vault_saves.json` | blocked/downsized trades + good/bad verdicts |
-| `data/portfolio.json` | live portfolio state |
-| `data/profile.json` | natural-language contract command and validated overrides |
-| `data/LOOP_STATE.md` | human-readable loop state generated from the JSON audit trail |
-| `data/agent_hub_status.json` | Bitget Agent Hub CLI/API/Skill Hub readiness |
-| `data/pred_trade_log.csv` | prediction-market paper fills and closes |
-| `data/pred_orders.json` | closed prediction-market outcomes and accuracy sample |
+| `RUN_MODE` | `fast_demo` or `live_paper` |
+| `SYMBOL_ALLOWLIST` | Crypto basket, defaults to BTC, ETH, SOL |
+| `LEVERAGE` | Paper perpetual leverage |
+| `MIN_CONFIDENCE` | Minimum confidence before risk checks |
+| `MAX_OPEN_POSITIONS` | Portfolio position limit |
+| `TRADE_ONLY_TREND` | Requires trend setups |
+| `REQUIRE_HTF_CONFIRMATION` | Requires higher-timeframe confirmation |
+| `MIN_TREND_ADX` | Minimum trend strength |
+| `REAL_TRADING_ENABLED` | Must be true before real execution can be enabled |
 
----
+## Project Structure
 
-## Project layout
-
-```
-config.py                 # all configuration
-main.py                   # orchestrator loop (live_paper + fast_demo)
-vesperclaw/
-  llm_client.py           # Qwen/Claude provider-agnostic client
-  snapshot.py             # market snapshot + ADX regime referee
-  sentiment.py            # Fear & Greed + GDELT/RSS/CryptoPanic news perception
-  agents.py               # analyst council (incl. sentiment) + adversarial debate
-  mandate.py              # Signal Mandate assembler
-  vault.py                # AgentVault risk firewall + Vault Saves
-  paper_engine.py         # multi-asset paper execution + CSV trade log
-  evolution.py            # close-based per-regime learning
-  store.py                # JSON/CSV persistence
-dashboard/app.py          # Streamlit glass-box dashboard
-deploy/                   # systemd services + deploy script (VPS)
+```text
+config.py                 central configuration
+main.py                   autonomous loop
+dashboard/app.py          Streamlit dashboard
+vesperclaw/agents.py      analyst council and debate
+vesperclaw/mandate.py     structured trade mandate
+vesperclaw/vault.py       AgentVault risk firewall
+vesperclaw/paper_engine.py paper execution and trade log
+vesperclaw/prediction.py  prediction-market paper agent
+vesperclaw/meme_radar.py  meme coin analysis
+vesperclaw/agent_hub.py   Bitget Agent Hub readiness
+samples/                  public sample logs and outputs
+deploy/                   VPS deployment files
 ```
 
----
+## Current Status
 
-## Deployment
+Completed:
 
-Runs 24/7 on a Linux VPS via two `systemd` services (loop + dashboard). See [`DEPLOY.md`](DEPLOY.md).
+- live public dashboard,
+- public MuleRun demo page,
+- public GitHub repo,
+- paper trading log,
+- AgentVault,
+- Alpha Gate,
+- Profit Guard,
+- Meme Radar,
+- World Cup prediction board,
+- Bitget Agent Hub readiness,
+- sample output artifacts.
 
----
+Still improving:
 
-## Run modes
+- profitability and longer forward testing,
+- deeper live sentiment/news feeds,
+- reproducible backtest notebook,
+- fuller Bitget Skill Hub integration,
+- optional real execution after paper performance is stable.
 
-```bash
-python main.py --mode fast_demo        # replay real 1m candles fast (judge demo)
-python main.py --mode live_paper       # 15m live basket scan, 24/7
-python main.py --mode prediction       # prediction markets (Polymarket read feed)
-python main.py --vibe "aggressive trend follower, BTC+ETH only, 3x leverage"
-```
+## One-Line Pitch
 
-## Instrument & perception breadth (shipped)
-
-Beyond the multi-asset spot agent, VesperClaw now spans:
-
-- **Perpetuals with funding-aware leverage** — leverage applied to notional,
-  funding cost accrued per held bar, liquidation backstop, and extreme funding
-  fades the crowded side. (`USE_PERPS`, `LEVERAGE`)
-- **Portfolio-level risk** — AgentVault caps *aggregate same-direction exposure*
-  across the correlated basket and downsizes to fit remaining room — a portfolio
-  risk manager, not just a per-trade gate.
-- **Bitget Agent Hub adapter** — detects official `bitget-hub`/MCP readiness and
-  surfaces Skill Hub coverage for macro, market intel, news, sentiment, and
-  technical analysis while keeping execution paper-only by default.
-- **Profit Guard** — a capital-preservation layer that reacts to live outcomes:
-  loss streaks trigger a lockout, drawdown raises the entry bar, uncertain regimes
-  are blocked, and new sizes are capped until the agent earns risk back.
-- **On-chain macro signal** — DeFiLlama total-TVL 7-day trend as a risk-on/off
-  proxy that nudges directional bias (keyless).
-- **Prediction markets** — a **Probability Agent** (Qwen) estimates true odds for
-  live Polymarket questions, including dedicated 2026 FIFA World Cup and football/soccer/NFL scans, and trades the gap vs. the market-implied price;
-  paper-only (read feed, no wallet), probability-move + timeout exits, full audit
-  trail. Its **90% target mode** is deliberately selective: it requires both
-  minimum edge and minimum confidence, records rejected markets as proof of
-  restraint, and reports observed accuracy from closed paper outcomes.
-- **Natural-language vibe trading** — describe a style in English; Qwen compiles it
-  into *validated, range-clamped* contract settings (symbols, leverage,
-  confidence, sizing, exposure). The live loop hot-loads the saved profile
-  between cycles, so the dashboard becomes a natural-language contract console,
-  not just a viewer.
-
-## Roadmap (room to grow)
-
-- Live (real-capital) execution toggle behind an explicit opt-in.
-- Deeper on-chain perception (whale flows, ETF/stablecoin flows) once reliable
-  free feeds are wired.
-- Per-regime evolution extended to the prediction-market and perps strategies.
-- Correlation-matrix-based sizing (currently same-direction aggregate cap).
-
-## Safety
-
-Paper-mode locked by default · no real capital · symbol allowlist · per-symbol & portfolio position caps · size/drawdown/daily-loss limits · cooldowns · volatility veto · complete logged audit trail of every action and refusal.
-
----
-
-*VesperClaw shows not just whether an agent made money, but **why** every action was taken, **why** unsafe actions were refused, and **how** closed trades evolved its future strategy.*
+**VesperClaw is an accountable AI trading agent that can trade, refuse, explain, and improve, with public logs to prove its decisions.**
