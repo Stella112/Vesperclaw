@@ -86,6 +86,9 @@ Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR
 - **Loop Map + state memory** - the dashboard shows the six running loops
   (Perceive, Propose, Verify, Execute, Monitor, Learn), and `data/LOOP_STATE.md`
   summarizes the live agent memory in a human-readable form.
+- **Bitget Agent Hub adapter** - detects the official `bitget-hub` CLI/MCP readiness,
+  exposes the five Skill Hub lanes, and keeps execution paper-only unless
+  `REAL_TRADING_ENABLED=true` is explicitly set.
 - **Explainable mandates with a built-in counterargument** — every proposed trade records the thesis *and* the strongest case against it (adversarial pass).
 - **AgentVault risk firewall** — hard limits on size, daily loss, drawdown, volatility, cooldown, R:R, open positions. Returns a reasoned decision, never a silent block.
 - **Profit Guard mode** — after loss clusters or drawdown, VesperClaw pauses new entries, blocks choppy regimes, raises the confidence floor, and caps position size until conditions improve.
@@ -142,6 +145,8 @@ All tunables live in [`config.py`](config.py) and are overridable via `.env`. Hi
 | `MAX_POSITION_SIZE_PCT` | `0.10` | vault size cap |
 | `MAX_DAILY_LOSS_PCT` | `0.05` | halt new trades after −5% day |
 | `MAX_DRAWDOWN_PCT` | `0.20` | lockdown after −20% from peak |
+| `BITGET_AGENT_HUB_ENABLED` | `true` | detect and surface official Bitget Agent Hub readiness |
+| `REAL_TRADING_ENABLED` | `false` | hard safety flag; real Bitget execution remains off by default |
 | `PROFIT_GUARD_LOSS_STREAK` | `2` | activate lockout after consecutive losses |
 | `PROFIT_GUARD_COOLDOWN_BARS` | `24` | pause duration after a loss cluster |
 | `PROFIT_GUARD_MAX_SIZE_PCT` | `0.035` | max new position size while guard is active |
@@ -168,6 +173,7 @@ All tunables live in [`config.py`](config.py) and are overridable via `.env`. Hi
 | `data/portfolio.json` | live portfolio state |
 | `data/profile.json` | natural-language contract command and validated overrides |
 | `data/LOOP_STATE.md` | human-readable loop state generated from the JSON audit trail |
+| `data/agent_hub_status.json` | Bitget Agent Hub CLI/API/Skill Hub readiness |
 | `data/pred_trade_log.csv` | prediction-market paper fills and closes |
 | `data/pred_orders.json` | closed prediction-market outcomes and accuracy sample |
 
@@ -219,6 +225,9 @@ Beyond the multi-asset spot agent, VesperClaw now spans:
 - **Portfolio-level risk** — AgentVault caps *aggregate same-direction exposure*
   across the correlated basket and downsizes to fit remaining room — a portfolio
   risk manager, not just a per-trade gate.
+- **Bitget Agent Hub adapter** — detects official `bitget-hub`/MCP readiness and
+  surfaces Skill Hub coverage for macro, market intel, news, sentiment, and
+  technical analysis while keeping execution paper-only by default.
 - **Profit Guard** — a capital-preservation layer that reacts to live outcomes:
   loss streaks trigger a lockout, drawdown raises the entry bar, uncertain regimes
   are blocked, and new sizes are capped until the agent earns risk back.

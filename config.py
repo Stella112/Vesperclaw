@@ -26,6 +26,8 @@ BITGET_API_KEY = os.getenv("BITGET_API_KEY", "")
 BITGET_SECRET_KEY = os.getenv("BITGET_SECRET_KEY", "")
 BITGET_PASSPHRASE = os.getenv("BITGET_PASSPHRASE", "")
 PLAYBOOK_API_KEY = os.getenv("PLAYBOOK_API_KEY", "")
+BITGET_AGENT_HUB_ENABLED = os.getenv("BITGET_AGENT_HUB_ENABLED", "true").lower() == "true"
+REAL_TRADING_ENABLED = os.getenv("REAL_TRADING_ENABLED", "false").lower() == "true"
 
 # Sentiment & news (Fear & Greed is keyless; CryptoPanic token is optional)
 CRYPTOPANIC_TOKEN = os.getenv("CRYPTOPANIC_TOKEN", "")
@@ -159,6 +161,7 @@ TRADE_LOG_CSV = f"{DATA_DIR}/trade_log.csv"
 PROFILE_FILE = f"{DATA_DIR}/profile.json"   # natural-language "vibe" overrides
 BRIEFING_FILE = f"{DATA_DIR}/briefing.json"  # agent's accountability self-briefing
 LOOP_STATE_FILE = f"{DATA_DIR}/LOOP_STATE.md"  # human-readable loop memory
+AGENT_HUB_STATUS_FILE = f"{DATA_DIR}/agent_hub_status.json"
 # prediction-market state (kept separate from the crypto loop)
 PRED_PORTFOLIO_FILE = f"{DATA_DIR}/pred_portfolio.json"
 PRED_MANDATES_FILE = f"{DATA_DIR}/pred_mandates.json"

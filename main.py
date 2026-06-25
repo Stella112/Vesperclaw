@@ -95,6 +95,11 @@ def run_cycle(engine: PaperEngine, symbols: list[str],
     engine.mark_prices(price_map)
     engine.save()
     try:
+        from vesperclaw import agent_hub
+        agent_hub.write_status()
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"agent hub status skipped: {e}")
+    try:
         from vesperclaw import loop_state
         loop_state.write_loop_state()
     except Exception as e:  # noqa: BLE001

@@ -55,6 +55,7 @@ VesperClaw currently supports:
 - Deterministic fallback heuristics when no LLM key is available.
 - Paper perpetuals with leverage-aware notional sizing and funding-cost awareness.
 - Portfolio-wide exposure caps for correlated same-direction positions.
+- Bitget Agent Hub adapter that detects official CLI/MCP readiness and surfaces the five Skill Hub perception lanes while keeping real execution disabled by default.
 - AgentVault risk gating with reasoned approve, downsize, reject, and delay outcomes.
 - Profit Guard mode that pauses after loss clusters, blocks choppy regimes, raises the confidence floor, and caps size during drawdown.
 - Vault Saves, which score blocked trades after the fact.
@@ -74,6 +75,7 @@ Below that, the dashboard surfaces:
 
 - Key performance metrics.
 - A Loop Map showing the six self-checking stages.
+- A Bitget Agent Hub panel showing CLI/API readiness and Skill Hub lane coverage.
 - A `LOOP_STATE.md` preview/download generated from live audit files.
 - The Conviction Ledger for taken and refused trades.
 - The agent's self-briefing.

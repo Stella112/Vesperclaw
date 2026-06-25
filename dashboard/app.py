@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
 from vesperclaw import briefing as briefing_mod  # noqa: E402
-from vesperclaw import evolution, loop_state, store, vibe  # noqa: E402
+from vesperclaw import agent_hub, evolution, loop_state, store, vibe  # noqa: E402
 
 st.set_page_config(page_title="VesperClaw | Bitget Agent", page_icon=":chart_with_upwards_trend:", layout="wide")
 
@@ -623,6 +623,50 @@ def loop_state_panel() -> None:
     )
     with st.expander("Preview LOOP_STATE.md", expanded=False):
         st.markdown(state_text)
+
+
+def agent_hub_panel() -> None:
+    data = store.read_json(data_file("AGENT_HUB_STATUS_FILE", "agent_hub_status.json"), {})
+    if not data:
+        try:
+            data = agent_hub.write_status()
+        except Exception:  # noqa: BLE001
+            data = {}
+    cli = data.get("cli", {}) if isinstance(data, dict) else {}
+    creds = data.get("credentials", {}) if isinstance(data, dict) else {}
+    skills = data.get("skills", []) if isinstance(data, dict) else []
+    cli_label = "CONNECTED" if cli.get("available") else "ADAPTER READY"
+    cli_color = "#20e3b2" if cli.get("available") else "#ffd166"
+    st.markdown("### Bitget Agent Hub")
+    st.markdown(
+        f"""
+        <div class="vc-panel">
+            <h3>{badge(f"AGENT HUB {cli_label}", cli_color)}</h3>
+            <p>
+                Official Bitget Hub integration surface. VesperClaw keeps execution
+                <strong>{safe_text(creds.get('mode', 'paper-only-safe'))}</strong> unless
+                real trading is explicitly enabled.
+            </p>
+            <div class="vc-ledger-stat">
+                <div class="vc-mini"><span>CLI</span><strong>{safe_text(cli.get('version', 'not detected'))}</strong></div>
+                <div class="vc-mini"><span>API Keys</span><strong>{'ready' if creds.get('read_ready') else 'not set'}</strong></div>
+                <div class="vc-mini"><span>Skills</span><strong>{len(skills)}/5 lanes</strong></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if skills:
+        rows = [
+            {
+                "skill": s.get("id"),
+                "capability": s.get("capability"),
+                "status": s.get("status"),
+                "vesperclaw_source": s.get("vesperclaw_source"),
+            }
+            for s in skills
+        ]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
 
 def trust_command_center(
@@ -1352,6 +1396,9 @@ def main() -> None:
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     loop_map_panel(portfolio, mandates, orders, evo)
+
+    st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
+    agent_hub_panel()
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     trust_command_center(portfolio, mandates, orders, saves, evo)

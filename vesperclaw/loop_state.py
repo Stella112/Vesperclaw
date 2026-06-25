@@ -72,6 +72,7 @@ def build_loop_state() -> str:
     saves = store.read_json(config.VAULT_SAVES_FILE, [])
     evo = store.read_json(config.EVOLUTION_FILE, [])
     profile = store.read_json(config.PROFILE_FILE, {})
+    hub = store.read_json(config.AGENT_HUB_STATUS_FILE, {})
     ledger = briefing.build_ledger()
 
     mandates = mandates if isinstance(mandates, list) else []
@@ -91,6 +92,8 @@ def build_loop_state() -> str:
     open_positions = portfolio.get("open_positions", [])
     open_positions = open_positions if isinstance(open_positions, list) else []
     profile_source = profile.get("source", "") if isinstance(profile, dict) else ""
+    hub_cli = hub.get("cli", {}) if isinstance(hub, dict) else {}
+    hub_creds = hub.get("credentials", {}) if isinstance(hub, dict) else {}
 
     lines = [
         "# VesperClaw Loop State",
@@ -100,6 +103,7 @@ def build_loop_state() -> str:
         f"Equity: {_money(equity)} ({_pct(ret)})",
         f"Closed trades: {closed} | Win rate: {win_rate:.1f}% | Open positions: {len(open_positions)}",
         f"Profit Guard: {'LOCKOUT' if guard['lockout'] else 'ACTIVE' if guard['active'] else 'CLEAR'} - {guard['reason']}",
+        f"Bitget Agent Hub: {'CLI detected' if hub_cli.get('available') else 'adapter ready'} / {hub_creds.get('mode', 'paper-only-safe')}",
         "",
         "## Loop Map",
         "",
@@ -124,6 +128,7 @@ def build_loop_state() -> str:
         f"- Vault saves file: `{config.VAULT_SAVES_FILE}`",
         f"- Mandate ledger: `{config.MANDATES_FILE}`",
         f"- Required trade log: `{config.TRADE_LOG_CSV}`",
+        f"- Bitget Agent Hub status: `{config.AGENT_HUB_STATUS_FILE}`",
         "",
         "## Latest Lesson",
         "",
