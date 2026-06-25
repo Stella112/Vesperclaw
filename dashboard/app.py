@@ -618,6 +618,7 @@ def judge_brief_panel(portfolio: dict, mandates: list[dict], orders: list[dict])
             <div class="vc-panel">
                 <h3>Current Safety State</h3>
                 <p><strong>{safe_text(guard_label)}</strong>: {safe_text(guard['reason'])}.
+                Alpha Gate now requires {safe_text(config.HTF_TIMEFRAME)} trend confirmation before any new entry.
                 Live trading remains disabled; Bitget keys are read-only.</p>
             </div>
             <div class="vc-panel">

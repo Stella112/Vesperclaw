@@ -76,6 +76,7 @@ def run_cycle(engine: PaperEngine, symbols: list[str],
 
         weights = evolution.weights_for(snap.regime)
         council = run_council(snap, weights)
+        _apply_alpha_gate(snap, council, sym, frame_map)
         seq = engine.next_seq()
         mandate = build_mandate(snap, council, seq)
 
@@ -127,6 +128,72 @@ def run_cycle(engine: PaperEngine, symbols: list[str],
         f"open={len(engine.state['open_positions'])} equity={engine.state['equity']}"
     )
     return records
+
+
+def _apply_alpha_gate(snap: Any, council: Any, symbol: str,
+                      frame_map: dict[str, pd.DataFrame] | None = None) -> None:
+    """Profit-seeking filter: trade less, only when trend quality is real."""
+    if council.direction is None:
+        return
+
+    reasons: list[str] = []
+    direction = council.direction
+
+    if config.TRADE_ONLY_TREND and snap.regime not in ("trend_up", "trend_down"):
+        reasons.append(f"{snap.regime} is not a trend regime")
+
+    if snap.adx < config.MIN_TREND_ADX:
+        reasons.append(f"ADX {snap.adx} below profit gate {config.MIN_TREND_ADX:g}")
+
+    if config.REQUIRE_VOLUME_NOT_FALLING and snap.volume_state == "falling":
+        reasons.append("volume is falling")
+
+    if config.BLOCK_OVEREXTENDED_RSI:
+        if direction == "long" and snap.rsi >= 72:
+            reasons.append(f"RSI {snap.rsi} too extended for long")
+        if direction == "short" and snap.rsi <= 28:
+            reasons.append(f"RSI {snap.rsi} too extended for short")
+
+    if direction == "long" and snap.recent_return_pct < -0.15:
+        reasons.append(f"recent return {snap.recent_return_pct:+.2f}% fights long")
+    if direction == "short" and snap.recent_return_pct > 0.15:
+        reasons.append(f"recent return {snap.recent_return_pct:+.2f}% fights short")
+
+    if config.REQUIRE_HTF_CONFIRMATION:
+        htf = _higher_timeframe_snapshot(symbol, frame_map)
+        if htf is None:
+            reasons.append(f"{config.HTF_TIMEFRAME} confirmation unavailable")
+        else:
+            snap.signals["htf_regime"] = htf.regime
+            snap.signals["htf_adx"] = htf.adx
+            snap.signals["htf_ema_long_bias"] = htf.signals.get("ema_long_bias")
+            long_ok = htf.regime == "trend_up" and htf.signals.get("ema_long_bias")
+            short_ok = htf.regime == "trend_down" and not htf.signals.get("ema_long_bias")
+            if direction == "long" and not long_ok:
+                reasons.append(f"{config.HTF_TIMEFRAME} does not confirm long ({htf.regime})")
+            if direction == "short" and not short_ok:
+                reasons.append(f"{config.HTF_TIMEFRAME} does not confirm short ({htf.regime})")
+
+    if not reasons:
+        council.thesis = f"Alpha Gate passed: {council.thesis}"
+        return
+
+    council.direction = None
+    council.requested_size_pct = 0.0
+    council.confidence = min(council.confidence, 0.25)
+    council.leading_agent = None
+    council.thesis = "No trade: Alpha Gate rejected weak setup."
+    council.counterargument = "; ".join(reasons)
+
+
+def _higher_timeframe_snapshot(symbol: str, frame_map: dict[str, pd.DataFrame] | None = None) -> Any | None:
+    try:
+        if frame_map and symbol in frame_map:
+            return build_snapshot(symbol=symbol, df=frame_map[symbol])
+        return build_snapshot(symbol=symbol, timeframe=config.HTF_TIMEFRAME)
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"HTF confirmation skipped for {symbol}: {e}")
+        return None
 
 
 def _run_prediction_cycle_safely() -> None:

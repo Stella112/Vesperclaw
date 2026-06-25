@@ -98,6 +98,14 @@ SL_ATR_MULT = 1.5
 TP_ATR_MULT = 2.5
 TIMEOUT_BARS = int(os.getenv("TIMEOUT_BARS", "16"))  # force-close stale trades
 
+# Alpha Gate: stricter confirmation layer before AgentVault.
+TRADE_ONLY_TREND = os.getenv("TRADE_ONLY_TREND", "true").lower() == "true"
+REQUIRE_HTF_CONFIRMATION = os.getenv("REQUIRE_HTF_CONFIRMATION", "true").lower() == "true"
+HTF_TIMEFRAME = os.getenv("HTF_TIMEFRAME", "1h")
+MIN_TREND_ADX = float(os.getenv("MIN_TREND_ADX", "28"))
+REQUIRE_VOLUME_NOT_FALLING = os.getenv("REQUIRE_VOLUME_NOT_FALLING", "true").lower() == "true"
+BLOCK_OVEREXTENDED_RSI = os.getenv("BLOCK_OVEREXTENDED_RSI", "true").lower() == "true"
+
 
 # ── AgentVault limits ─────────────────────────────────────────────────
 MAX_POSITION_SIZE_PCT = float(os.getenv("MAX_POSITION_SIZE_PCT", "0.06"))
