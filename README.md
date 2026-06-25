@@ -116,6 +116,25 @@ Perceive -> Propose -> Verify -> Execute -> Monitor -> Learn -> Repeat
 | Monitor | Positions are marked to market and closed by stop, target, or timeout |
 | Learn | Closed outcomes and refused trades update the audit trail |
 
+## Evolution Memory
+
+VesperClaw is designed to improve from outcomes, not just generate one-off signals.
+
+When a paper trade closes, the Evolution Engine records what happened and updates the agent's memory by regime. A trend trade in a strong market should not teach the same lesson as a range trade in a choppy market, so VesperClaw keeps learning tied to market context.
+
+It tracks:
+
+- which agent role led the decision,
+- the regime at entry,
+- whether the trade won or lost,
+- whether the thesis was validated,
+- whether AgentVault saved the agent from a bad trade,
+- what should be weighted more or less in future cycles.
+
+Learning is intentionally conservative. VesperClaw updates only after closed outcomes, uses capped weight changes, keeps minimum sample requirements, and avoids letting one noisy trade rewrite the whole strategy.
+
+The dashboard exposes this through evolution logs, strategy weights, refused-trade scoring, and the Conviction Ledger.
+
 ## Extra Agent Surfaces
 
 ### Meme Radar
@@ -200,6 +219,8 @@ It shows:
 - Meme Radar,
 - Bitget Agent Hub readiness,
 - Conviction Ledger,
+- evolution memory,
+- strategy weights,
 - AgentVault checks,
 - paper trade logs.
 
@@ -258,6 +279,7 @@ vesperclaw/agents.py      analyst council and debate
 vesperclaw/mandate.py     structured trade mandate
 vesperclaw/vault.py       AgentVault risk firewall
 vesperclaw/paper_engine.py paper execution and trade log
+vesperclaw/evolution.py   close-based self-improvement memory
 vesperclaw/prediction.py  prediction-market paper agent
 vesperclaw/meme_radar.py  meme coin analysis
 vesperclaw/agent_hub.py   Bitget Agent Hub readiness
@@ -279,6 +301,7 @@ Completed:
 - Meme Radar,
 - World Cup prediction board,
 - Bitget Agent Hub readiness,
+- evolution memory from closed outcomes,
 - sample output artifacts.
 
 Still improving:
