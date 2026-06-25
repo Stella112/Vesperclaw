@@ -38,6 +38,7 @@ from vesperclaw.vault import evaluate as vault_evaluate
 
 MIN_WINDOW = max(config.BB_PERIOD, config.EMA_SLOW, config.ATR_PERIOD) + 5
 _ACTIVE_PROFILE_SIG = ""
+_PRED_ENGINE = None
 
 
 def _apply_saved_profile_if_changed() -> None:
@@ -105,6 +106,13 @@ def run_cycle(engine: PaperEngine, symbols: list[str],
     except Exception as e:  # noqa: BLE001
         logger.debug(f"loop state skipped: {e}")
 
+    if (
+        config.PRED_RUN_IN_MAIN_LOOP
+        and config.PRED_RUN_EVERY_CYCLES > 0
+        and engine.state["cycle"] % config.PRED_RUN_EVERY_CYCLES == 0
+    ):
+        _run_prediction_cycle_safely()
+
     # refresh the accountability briefing periodically (keeps LLM cost low)
     if engine.state["cycle"] % config.BRIEFING_EVERY_CYCLES == 0:
         try:
@@ -119,6 +127,19 @@ def run_cycle(engine: PaperEngine, symbols: list[str],
         f"open={len(engine.state['open_positions'])} equity={engine.state['equity']}"
     )
     return records
+
+
+def _run_prediction_cycle_safely() -> None:
+    """Refresh prediction markets without letting that lane stop crypto scanning."""
+    global _PRED_ENGINE
+    try:
+        from vesperclaw import prediction
+
+        if _PRED_ENGINE is None:
+            _PRED_ENGINE = prediction.PredEngine()
+        prediction.run_cycle(_PRED_ENGINE)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"prediction refresh skipped: {e}")
 
 
 # ── fast-demo replay ────────────────────────────────────────────────────

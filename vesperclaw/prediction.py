@@ -38,6 +38,23 @@ FOOTBALL_TERMS = (
 WORLD_CUP_TERMS = (
     "world cup", "worldcup", "fifa world cup", "world cup 2026", "fifa 2026",
 )
+WORLD_CUP_COUNTRIES = (
+    "argentina", "brazil", "france", "england", "spain", "germany", "portugal",
+    "netherlands", "usa", "united states", "mexico", "canada", "uruguay",
+    "italy", "croatia", "morocco", "belgium", "switzerland", "japan",
+    "south korea", "korea republic", "australia", "colombia", "ecuador",
+)
+WORLD_CUP_PLAYER_TERMS = (
+    "golden boot", "golden ball", "golden glove", "score a goal", "1+ goals",
+    "2+ goals", "goal contributions", "most goal contributions", "shots",
+    "saves", "assists", "mbappe", "messi", "haaland", "vinicius",
+    "bellingham", "kane", "neymar", "ronaldo", "yamal",
+)
+WORLD_CUP_WINNER_TERMS = (
+    "win the 2026 fifa world cup", "win the world cup", "world cup champion",
+    "champion be a nation", "reach the quarterfinals", "reach the semifinals",
+    "reach the final", "be eliminated",
+)
 WORLD_CUP_FIXTURE_TERMS = (
     "scotland v brazil", "scotland vs brazil", "brazil beat scotland",
     "morocco v haiti", "morocco vs haiti", "morocco beat haiti",
@@ -69,7 +86,7 @@ def _parse_yes_price(raw: Any) -> float | None:
         yes = float(prices[0])
     except (TypeError, ValueError, IndexError):
         return None
-    if 0.01 <= yes <= 0.99:
+    if 0.0001 <= yes <= 0.9999:
         return yes
     return None
 
@@ -80,6 +97,7 @@ def _market_blob(market: dict[str, Any]) -> str:
         str(market.get("slug", "")),
         str(market.get("category", "")),
         str(market.get("description", "")),
+        str(market.get("groupItemTitle", "")),
     ]
     tags = market.get("tags") or []
     if isinstance(tags, list):
@@ -88,14 +106,63 @@ def _market_blob(market: dict[str, Any]) -> str:
                 parts.append(str(tag.get("label") or tag.get("name") or tag.get("slug") or ""))
             else:
                 parts.append(str(tag))
+    events = market.get("events") or []
+    if isinstance(events, list):
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            parts.extend(
+                str(event.get(key, ""))
+                for key in ("title", "ticker", "slug", "description")
+            )
     return " ".join(parts).lower()
 
 
 def market_topic(market: dict[str, Any]) -> str:
     blob = _market_blob(market)
-    if any(term in blob for term in WORLD_CUP_TERMS) or any(term in blob for term in WORLD_CUP_FIXTURE_TERMS):
+    if (
+        any(term in blob for term in WORLD_CUP_TERMS)
+        or any(term in blob for term in WORLD_CUP_FIXTURE_TERMS)
+        or (
+            any(country in blob for country in WORLD_CUP_COUNTRIES)
+            and any(term in blob for term in ("group", "score", "goal", "shots", "match", "beat", "vs.", " vs "))
+        )
+    ):
         return "world_cup"
     return "football" if any(term in blob for term in FOOTBALL_TERMS) else "general"
+
+
+def market_kind(market: dict[str, Any]) -> str:
+    blob = _market_blob(market)
+    if market_topic(market) != "world_cup":
+        return "football" if any(term in blob for term in FOOTBALL_TERMS) else "general"
+    if any(term in blob for term in WORLD_CUP_PLAYER_TERMS):
+        return "player_prop"
+    if any(term in blob for term in WORLD_CUP_WINNER_TERMS):
+        return "country_winner"
+    if any(term in blob for term in WORLD_CUP_FIXTURE_TERMS) or any(
+        term in blob for term in (" vs ", " vs.", " v ", "exact score", "o/u", "handicap", "to score first", "beat ")
+    ):
+        return "match_prop"
+    return "world_cup"
+
+
+def _market_record(m: dict[str, Any], yes: float, topic: str) -> dict[str, Any]:
+    return {
+        "id": str(m.get("id")),
+        "question": m.get("question", "")[:160],
+        "yes_price": round(yes, 3),
+        "volume": float(m.get("volume") or 0),
+        "volume24hr": float(m.get("volume24hr") or m.get("volume24hrClob") or 0),
+        "topic": topic,
+        "market_kind": market_kind(m),
+        "updated_at": m.get("updatedAt") or m.get("updated_at"),
+    }
+
+
+def _world_cup_priority(market: dict[str, Any]) -> tuple[int, float]:
+    kind_rank = {"country_winner": 0, "player_prop": 1, "match_prop": 2, "world_cup": 3}
+    return (kind_rank.get(market.get("market_kind", "world_cup"), 4), -float(market.get("volume") or 0))
 
 
 # ── market data ──────────────────────────────────────────────────────────
@@ -105,7 +172,7 @@ def fetch_markets(limit: int, topic: str = "general") -> list[dict[str, Any]]:
     if limit <= 0:
         return []
     try:
-        fetch_limit = limit * 3 if topic == "general" else max(limit * 40, 160)
+        fetch_limit = limit * 4 if topic == "general" else max(limit * 120, 1000)
         r = requests.get(
             GAMMA_URL,
             params={"closed": "false", "active": "true", "order": "volume",
@@ -120,16 +187,16 @@ def fetch_markets(limit: int, topic: str = "general") -> list[dict[str, Any]]:
             yes = _parse_yes_price(m.get("outcomePrices"))
             if yes is None:
                 continue
-            if 0.05 < yes < 0.95:  # skip near-resolved markets
-                out.append({
-                    "id": str(m.get("id")),
-                    "question": m.get("question", "")[:140],
-                    "yes_price": round(yes, 3),
-                    "volume": float(m.get("volume") or 0),
-                    "topic": detected_topic,
-                })
-            if len(out) >= limit:
+            if topic == "world_cup":
+                if 0.001 <= yes <= 0.999:
+                    out.append(_market_record(m, yes, detected_topic))
+            elif 0.05 < yes < 0.95:
+                out.append(_market_record(m, yes, detected_topic))
+            if topic != "world_cup" and len(out) >= limit:
                 break
+        if topic == "world_cup":
+            out.sort(key=_world_cup_priority)
+            out = out[:limit]
         if out:
             logger.info(f"Polymarket: {len(out)} live {topic} markets fetched.")
             return out
@@ -139,11 +206,12 @@ def fetch_markets(limit: int, topic: str = "general") -> list[dict[str, Any]]:
 
 
 def fetch_prediction_universe() -> list[dict[str, Any]]:
-    markets = fetch_markets(config.PRED_MARKETS, topic="general")
+    markets: list[dict[str, Any]] = []
     if config.PRED_INCLUDE_WORLD_CUP and config.PRED_WORLD_CUP_MARKETS > 0:
         markets.extend(fetch_markets(config.PRED_WORLD_CUP_MARKETS, topic="world_cup"))
     if config.PRED_INCLUDE_FOOTBALL and config.PRED_FOOTBALL_MARKETS > 0:
         markets.extend(fetch_markets(config.PRED_FOOTBALL_MARKETS, topic="football"))
+    markets.extend(fetch_markets(config.PRED_MARKETS, topic="general"))
 
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
@@ -190,6 +258,12 @@ def _synthetic_markets(limit: int, topic: str = "general") -> list[dict[str, Any
         "Will a Premier League match finish with over 2.5 goals?",
     ]
     world_cup_qs = [
+        "Will Brazil win the 2026 FIFA World Cup?",
+        "Will Argentina win the 2026 FIFA World Cup?",
+        "Will France win the 2026 FIFA World Cup?",
+        "Will England win the 2026 FIFA World Cup?",
+        "Will Kylian Mbappe win the Golden Boot at the 2026 FIFA World Cup?",
+        "Will Lionel Messi score a goal at the 2026 FIFA World Cup?",
         "Will Brazil beat Scotland in their 2026 FIFA World Cup group match?",
         "Will Morocco beat Haiti in their 2026 FIFA World Cup group match?",
         "Will Canada beat Switzerland in their 2026 FIFA World Cup group match?",
@@ -203,7 +277,9 @@ def _synthetic_markets(limit: int, topic: str = "general") -> list[dict[str, Any
     return [
         {"id": f"SYN-{topic.upper()}-{i}", "question": qs[i % len(qs)],
          "yes_price": round(float(rng.uniform(0.2, 0.8)), 3),
-         "volume": float(rng.uniform(1e4, 1e6)), "topic": topic}
+         "volume": float(rng.uniform(1e4, 1e6)), "volume24hr": float(rng.uniform(500, 50000)),
+         "topic": topic, "market_kind": market_kind({"question": qs[i % len(qs)]}),
+         "updated_at": _now()}
         for i in range(min(limit, len(qs)))
     ]
 
@@ -220,12 +296,10 @@ PROB_SYS = (
 
 def estimate_probability(question: str, market_yes: float, topic: str = "general") -> dict[str, Any]:
     """Return {prob, confidence, thesis, counterargument}. Falls back to no-edge."""
+    fallback = _heuristic_probability(question, market_yes, topic)
+    if not config.PRED_USE_LLM:
+        return {**fallback, "_source": "heuristic_fast"}
     client = get_client()
-    fallback = {
-        "prob": market_yes, "confidence": 0.3,
-        "thesis": "No independent edge; deferring to market-implied odds.",
-        "counterargument": "Market price already aggregates available information.",
-    }
     user = (
         f"Market topic: {topic}\n"
         f"Market question: {question}\n"
@@ -236,13 +310,62 @@ def estimate_probability(question: str, market_yes: float, topic: str = "general
         f'Respond ONLY with JSON: {{"prob":0.0-1.0,"confidence":0.0-1.0,'
         f'"thesis":"one sentence on your estimate","counterargument":"one sentence on the main risk"}}'
     )
-    data = client.chat_json(PROB_SYS, user, fallback=fallback, fast=False)
+    data = client.chat_json(PROB_SYS, user, fallback=fallback, fast=True)
     try:
         data["prob"] = max(0.01, min(0.99, float(data.get("prob", market_yes))))
         data["confidence"] = max(0.0, min(1.0, float(data.get("confidence", 0.3))))
     except (TypeError, ValueError):
         return fallback
     return data
+
+
+def _heuristic_probability(question: str, market_yes: float, topic: str) -> dict[str, Any]:
+    """Fast calibrated estimate for live refreshes when LLM calls are too slow."""
+    q = question.lower()
+    kind = market_kind({"question": question})
+    prob = market_yes
+    confidence = 0.55
+    thesis = "Market-implied odds are the anchor; no strong independent edge is assumed."
+    counter = "Sports and prediction markets are efficient, so most apparent edges are noise."
+
+    if topic == "world_cup":
+        confidence = 0.62
+        if kind == "country_winner":
+            if market_yes < 0.02:
+                prob = max(0.001, market_yes * 0.85)
+                thesis = "Long-shot outright winner markets are usually efficiently priced and often too optimistic."
+            elif any(team in q for team in ("brazil", "france", "england", "spain", "argentina")):
+                prob = min(0.99, market_yes + 0.005)
+                thesis = "Elite-team outright markets have plausible tournament paths, but the edge is still thin."
+            else:
+                prob = max(0.001, market_yes - 0.004)
+                thesis = "Country path risk makes this a watchlist market, not a conviction trade."
+        elif kind == "player_prop":
+            confidence = 0.58
+            if any(term in q for term in ("score a goal", "1+ shots", "shots")):
+                prob = min(0.99, market_yes + 0.01)
+                thesis = "Player prop has a concrete participation/stat path, but lineup risk remains material."
+            else:
+                prob = max(0.001, market_yes - 0.003)
+                thesis = "Tournament awards and cumulative props carry rotation and bracket-path uncertainty."
+        elif kind == "match_prop":
+            confidence = 0.60
+            prob = market_yes + (0.008 if "beat" in q else 0.0)
+            thesis = "Match prop is concrete enough to track live, but not enough for a high-accuracy entry."
+
+    elif topic == "football":
+        confidence = 0.56
+        prob = market_yes
+        thesis = "Football market is tracked, but without a clear line-specific edge the agent stays near market odds."
+
+    prob = round(max(0.001, min(0.999, prob)), 3)
+    edge = prob - market_yes
+    return {
+        "prob": prob,
+        "confidence": round(confidence, 2),
+        "thesis": thesis,
+        "counterargument": counter if abs(edge) < 0.03 else "The adjustment is small and can be overwhelmed by late news or lineup changes.",
+    }
 
 
 # ── paper engine (probability-move trading) ───────────────────────────────
@@ -263,6 +386,7 @@ class PredPosition:
     edge: float = 0.0
     mandate_id: str = ""
     topic: str = "general"
+    market_kind: str = "general"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -368,12 +492,14 @@ class PredEngine:
             entry_cycle=self.state["cycle"], entry_time=_now(), est_prob=est["prob"],
             confidence=est.get("confidence", 0.0), edge=est.get("edge", est["prob"] - yes),
             mandate_id=mandate_id, topic=market.get("topic", "general"),
+            market_kind=market.get("market_kind", market.get("topic", "general")),
         )
         self.state["open_positions"].append(pos.to_dict())
         self.state["last_yes"][market["id"]] = yes
         store.append_trade_log_to(config.PRED_TRADE_LOG_CSV, {
             "timestamp": pos.entry_time, "mandate_id": mandate_id, "market": pos.question,
-            "topic": pos.topic, "side": side, "event": "OPEN", "yes_price": yes, "stake": stake,
+            "topic": pos.topic, "market_kind": pos.market_kind, "side": side, "event": "OPEN",
+            "yes_price": yes, "stake": stake,
             "est_prob": est["prob"], "confidence": pos.confidence, "edge": pos.edge, "pnl": 0.0,
         })
         logger.info(f"PRED OPEN {side} @ {yes} (est {est['prob']:.2f}) — {pos.question[:60]}")
@@ -421,6 +547,7 @@ class PredEngine:
         self.state["losses"] += int(not win)
         rec = {
             "mandate_id": p.mandate_id, "market_id": p.market_id, "topic": p.topic,
+            "market_kind": p.market_kind,
             "question": p.question, "side": p.side,
             "entry_yes": p.entry_yes, "exit_yes": yes, "stake": p.stake,
             "pnl": pnl, "pnl_pct": round(pnl / p.stake * 100, 2) if p.stake else 0,
@@ -430,7 +557,8 @@ class PredEngine:
         store.append_json_list(config.PRED_ORDERS_FILE, rec, cap=1000)
         store.append_trade_log_to(config.PRED_TRADE_LOG_CSV, {
             "timestamp": rec["exit_time"], "mandate_id": p.mandate_id, "market": p.question,
-            "topic": p.topic, "side": p.side, "event": f"CLOSE_{reason.upper()}", "yes_price": yes,
+            "topic": p.topic, "market_kind": p.market_kind, "side": p.side,
+            "event": f"CLOSE_{reason.upper()}", "yes_price": yes,
             "stake": p.stake, "est_prob": p.est_prob, "confidence": p.confidence,
             "edge": p.edge, "pnl": pnl,
         })
@@ -459,9 +587,13 @@ def run_cycle(engine: PredEngine) -> None:
     engine.update_and_exit(prices)
 
     held = engine.held_market_ids()
+    evals = 0
     for m in markets:
         if m["id"] in held or len(engine.state["open_positions"]) >= config.PRED_MAX_POSITIONS:
             continue
+        if evals >= config.PRED_MAX_EVALS_PER_CYCLE:
+            break
+        evals += 1
         est = estimate_probability(m["question"], m["yes_price"], topic=m.get("topic", "general"))
         edge = est["prob"] - m["yes_price"]
         est["edge"] = edge
@@ -475,6 +607,7 @@ def run_cycle(engine: PredEngine) -> None:
             "mandate_id": f"PM-{datetime.now(timezone.utc):%Y-%m-%d}-{seq:04d}",
             "timestamp": _now(), "market": m["question"], "market_id": m["id"],
             "topic": m.get("topic", "general"),
+            "market_kind": m.get("market_kind", m.get("topic", "general")),
             "yes_price": m["yes_price"], "est_prob": round(est["prob"], 3),
             "edge": round(edge, 3), "side": side, "action": f"BUY_{side}" if decision == "APPROVED" else "NO_TRADE",
             "confidence": est["confidence"], "thesis": est["thesis"],

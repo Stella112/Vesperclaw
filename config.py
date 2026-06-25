@@ -100,18 +100,18 @@ TIMEOUT_BARS = int(os.getenv("TIMEOUT_BARS", "16"))  # force-close stale trades
 
 
 # ── AgentVault limits ─────────────────────────────────────────────────
-MAX_POSITION_SIZE_PCT = 0.10   # max 10% of equity notional per trade
-MIN_CONFIDENCE = 0.55
-MAX_DAILY_LOSS_PCT = 0.05      # halt new trades after -5% day
-MAX_DRAWDOWN_PCT = 0.20        # lockdown after -20% from peak
+MAX_POSITION_SIZE_PCT = float(os.getenv("MAX_POSITION_SIZE_PCT", "0.06"))
+MIN_CONFIDENCE = float(os.getenv("MIN_CONFIDENCE", "0.68"))
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))
+MAX_DRAWDOWN_PCT = float(os.getenv("MAX_DRAWDOWN_PCT", "0.08"))
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))   # portfolio-wide cap
 MAX_POSITIONS_PER_SYMBOL = 1   # at most one open position per symbol
 # Portfolio-level: the basket (BTC/ETH/SOL) is highly correlated, so same-direction
 # positions add up as one risk. Cap aggregate same-direction notional exposure.
 MAX_PORTFOLIO_EXPOSURE_PCT = float(os.getenv("MAX_PORTFOLIO_EXPOSURE_PCT", "0.18"))
 DANGER_VOLATILITY_PCT = 5.0    # ATR as % of price -> Risk Agent veto
-COOLDOWN_BARS = 4
-MIN_RR = 1.5                   # minimum risk/reward ratio
+COOLDOWN_BARS = int(os.getenv("COOLDOWN_BARS", "8"))
+MIN_RR = float(os.getenv("MIN_RR", "1.5"))
 
 # Profit Guard: tighten the agent after losses instead of letting it bleed in chop.
 PROFIT_GUARD_ENABLED = os.getenv("PROFIT_GUARD_ENABLED", "true").lower() == "true"
@@ -121,8 +121,10 @@ PROFIT_GUARD_MIN_CONFIDENCE_BONUS = float(os.getenv("PROFIT_GUARD_MIN_CONFIDENCE
 PROFIT_GUARD_MAX_SIZE_PCT = float(os.getenv("PROFIT_GUARD_MAX_SIZE_PCT", "0.035"))
 PROFIT_GUARD_DRAWDOWN_PCT = float(os.getenv("PROFIT_GUARD_DRAWDOWN_PCT", "0.01"))
 PROFIT_GUARD_DAILY_LOSS_PCT = float(os.getenv("PROFIT_GUARD_DAILY_LOSS_PCT", "0.005"))
+PROFIT_GUARD_HARD_LOCK_DRAWDOWN_PCT = float(os.getenv("PROFIT_GUARD_HARD_LOCK_DRAWDOWN_PCT", "0.01"))
+PROFIT_GUARD_HARD_LOCK_DAILY_LOSS_PCT = float(os.getenv("PROFIT_GUARD_HARD_LOCK_DAILY_LOSS_PCT", "0.003"))
 PROFIT_GUARD_BLOCK_REGIMES = [
-    r.strip() for r in os.getenv("PROFIT_GUARD_BLOCK_REGIMES", "uncertain").split(",") if r.strip()
+    r.strip() for r in os.getenv("PROFIT_GUARD_BLOCK_REGIMES", "uncertain,range").split(",") if r.strip()
 ]
 
 
@@ -158,6 +160,10 @@ PRED_INCLUDE_FOOTBALL = os.getenv("PRED_INCLUDE_FOOTBALL", "true").lower() == "t
 PRED_FOOTBALL_MARKETS = int(os.getenv("PRED_FOOTBALL_MARKETS", "4"))
 PRED_INCLUDE_WORLD_CUP = os.getenv("PRED_INCLUDE_WORLD_CUP", "true").lower() == "true"
 PRED_WORLD_CUP_MARKETS = int(os.getenv("PRED_WORLD_CUP_MARKETS", "6"))
+PRED_RUN_IN_MAIN_LOOP = os.getenv("PRED_RUN_IN_MAIN_LOOP", "true").lower() == "true"
+PRED_RUN_EVERY_CYCLES = int(os.getenv("PRED_RUN_EVERY_CYCLES", "1"))
+PRED_MAX_EVALS_PER_CYCLE = int(os.getenv("PRED_MAX_EVALS_PER_CYCLE", "8"))
+PRED_USE_LLM = os.getenv("PRED_USE_LLM", "false").lower() == "true"
 
 
 # ── Storage ───────────────────────────────────────────────────────────

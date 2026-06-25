@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
 from vesperclaw import briefing as briefing_mod  # noqa: E402
-from vesperclaw import agent_hub, evolution, loop_state, meme_radar, store, vibe  # noqa: E402
+from vesperclaw import agent_hub, evolution, loop_state, meme_radar, prediction, store, vibe  # noqa: E402
 
 st.set_page_config(page_title="VesperClaw | Bitget Agent", page_icon=":chart_with_upwards_trend:", layout="wide")
 
@@ -417,7 +417,9 @@ def profit_guard_summary(portfolio: dict) -> dict[str, Any]:
     cycle = int(portfolio.get("cycle", 0))
     guard_until = int(portfolio.get("profit_guard_until_cycle", 0))
     loss_streak = int(portfolio.get("consecutive_losses", 0))
-    lockout = cycle < guard_until
+    hard_drawdown_lock = drawdown >= config.PROFIT_GUARD_HARD_LOCK_DRAWDOWN_PCT
+    hard_daily_lock = daily_loss >= config.PROFIT_GUARD_HARD_LOCK_DAILY_LOSS_PCT
+    lockout = cycle < guard_until or hard_drawdown_lock or hard_daily_lock
     active = (
         config.PROFIT_GUARD_ENABLED
         and (
@@ -429,7 +431,12 @@ def profit_guard_summary(portfolio: dict) -> dict[str, Any]:
     )
     reasons = []
     if lockout:
-        reasons.append(f"lockout until cycle {guard_until}")
+        if cycle < guard_until:
+            reasons.append(f"lockout until cycle {guard_until}")
+        if hard_drawdown_lock:
+            reasons.append(f"hard drawdown brake {drawdown:.2%}")
+        if hard_daily_lock:
+            reasons.append(f"hard daily-loss brake {daily_loss:.2%}")
     if loss_streak >= config.PROFIT_GUARD_LOSS_STREAK:
         reasons.append(f"{loss_streak} consecutive losses")
     if drawdown >= config.PROFIT_GUARD_DRAWDOWN_PCT:
@@ -466,6 +473,11 @@ def compact_usd(value: Any) -> str:
 def cached_meme_scan(query: str, guard_active: bool, guard_reason: str) -> dict[str, Any]:
     guard = {"active": guard_active, "reason": guard_reason}
     return meme_radar.analyze(query=query, guard=guard)
+
+
+@st.cache_data(ttl=180, show_spinner=False)
+def cached_world_cup_board(limit: int) -> list[dict[str, Any]]:
+    return prediction.fetch_markets(limit, topic="world_cup")
 
 
 def latest_vault_decision(mandates: list[dict]) -> str:
@@ -584,6 +596,40 @@ def kpi_strip(portfolio: dict) -> None:
     c4.metric("Closed trades", closed)
     c5.metric("Win rate", f"{wr:.1f}%")
     c6.metric("Cycle", portfolio.get("cycle", 0))
+
+
+def judge_brief_panel(portfolio: dict, mandates: list[dict], orders: list[dict]) -> None:
+    guard = profit_guard_summary(portfolio)
+    pnl = pnl_summary(portfolio)
+    latest = mandates[-1] if mandates else {}
+    closed = len(orders)
+    wins = sum(1 for order in orders if order.get("win"))
+    win_rate = wins / closed * 100 if closed else 0.0
+    guard_label = "Capital brake ON" if guard["lockout"] else "Risk tightened" if guard["active"] else "Normal scan"
+    st.markdown("### Judge Brief")
+    st.markdown(
+        f"""
+        <div class="vc-stack">
+            <div class="vc-panel">
+                <h3>What VesperClaw Is</h3>
+                <p>Autonomous Bitget paper agent with explainable mandates, AgentVault risk firewall,
+                refusal scoring, evolution memory, prediction markets, and Meme Radar.</p>
+            </div>
+            <div class="vc-panel">
+                <h3>Current Safety State</h3>
+                <p><strong>{safe_text(guard_label)}</strong>: {safe_text(guard['reason'])}.
+                Live trading remains disabled; Bitget keys are read-only.</p>
+            </div>
+            <div class="vc-panel">
+                <h3>Proof To Inspect</h3>
+                <p>Paper PnL {pnl['total']:+,.2f}, closed trades {closed}, win rate {win_rate:.1f}%.
+                Latest mandate: {safe_text(latest.get('action', 'waiting'))} /
+                {safe_text(latest.get('vault', {}).get('decision', 'idle'))}.</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def profit_guard_panel(portfolio: dict) -> None:
@@ -1398,9 +1444,6 @@ def prediction_panel() -> None:
     orders = store.read_json(data_file("PRED_ORDERS_FILE", "pred_orders.json"), [])
     mandates = mandates if isinstance(mandates, list) else []
     orders = orders if isinstance(orders, list) else []
-    if not pf and not mandates and not orders:
-        return
-
     st.markdown("### Prediction Markets")
     eq = pf.get("equity", config.PRED_INITIAL_BALANCE)
     closed = len(orders)
@@ -1436,11 +1479,66 @@ def prediction_panel() -> None:
     c6.metric("World Cup", world_cup_seen, f"{world_cup_open} open")
     c7.metric("Football", football_seen, f"{football_open} open")
 
+    try:
+        live_world_cup = cached_world_cup_board(max(config.PRED_WORLD_CUP_MARKETS, 12))
+    except Exception:  # noqa: BLE001
+        live_world_cup = []
+    world_cup_mandates = [m for m in mandates if m.get("topic") == "world_cup"]
+    world_cup_rows = []
+    for m in world_cup_mandates[-12:]:
+        world_cup_rows.append(
+            {
+                "lane": m.get("market_kind", "world_cup"),
+                "market": m.get("market", "")[:82],
+                "yes": m.get("yes_price"),
+                "agent": m.get("est_prob"),
+                "edge": m.get("edge"),
+                "confidence": m.get("confidence"),
+                "decision": m.get("vault", {}).get("decision"),
+                "gate": m.get("vault", {}).get("reason"),
+            }
+        )
+    seen_markets = {row["market"] for row in world_cup_rows}
+    for m in live_world_cup:
+        label = m.get("question", "")[:82]
+        if label in seen_markets:
+            continue
+        world_cup_rows.append(
+            {
+                "lane": m.get("market_kind", "world_cup"),
+                "market": label,
+                "yes": m.get("yes_price"),
+                "agent": None,
+                "edge": None,
+                "confidence": None,
+                "decision": "WATCHLIST",
+                "gate": "live market queued for next probability cycle",
+            }
+        )
+        if len(world_cup_rows) >= 12:
+            break
+
+    if world_cup_rows:
+        st.markdown("#### World Cup Board")
+        st.caption("Country winner, player scorer/award, and match-prop markets are refreshed from the live prediction feed.")
+        st.dataframe(
+            pd.DataFrame(world_cup_rows),
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "yes": st.column_config.NumberColumn("market yes", format="%.3f"),
+                "agent": st.column_config.NumberColumn("agent estimate", format="%.3f"),
+                "edge": st.column_config.NumberColumn("edge", format="%+.3f"),
+                "confidence": st.column_config.ProgressColumn("confidence", min_value=0, max_value=1),
+            },
+        )
+
     if mandates:
         rows = [
             {
                 "topic": m.get("topic", "general"),
-                "market": m["market"][:70],
+                "lane": m.get("market_kind", m.get("topic", "general")),
+                "market": m.get("market", "")[:70],
                 "yes": m.get("yes_price"),
                 "estimate": m.get("est_prob"),
                 "edge": m.get("edge"),
@@ -1469,6 +1567,7 @@ def prediction_panel() -> None:
         open_rows = [
             {
                 "topic": p.get("topic", "general"),
+                "lane": p.get("market_kind", p.get("topic", "general")),
                 "market": p.get("question", "")[:70],
                 "side": p.get("side"),
                 "entry_yes": p.get("entry_yes"),
@@ -1487,6 +1586,7 @@ def prediction_panel() -> None:
         closed_rows = [
             {
                 "topic": o.get("topic", "general"),
+                "lane": o.get("market_kind", o.get("topic", "general")),
                 "market": o.get("question", "")[:70],
                 "side": o.get("side"),
                 "entry_yes": o.get("entry_yes"),
@@ -1568,7 +1668,13 @@ def main() -> None:
     st.write("")
     kpi_strip(portfolio)
     st.write("")
+    judge_brief_panel(portfolio, mandates, orders)
+
+    st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     profit_guard_panel(portfolio)
+
+    st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
+    prediction_panel()
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     meme_radar_panel(portfolio)
@@ -1615,7 +1721,6 @@ def main() -> None:
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     trade_log()
-    prediction_panel()
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     loop_state_panel()

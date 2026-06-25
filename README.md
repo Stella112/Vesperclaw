@@ -91,8 +91,9 @@ Risk management on every trade: **stop-loss 1.5× ATR**, **take-profit 2.5× ATR
   `REAL_TRADING_ENABLED=true` is explicitly set.
 - **Explainable mandates with a built-in counterargument** — every proposed trade records the thesis *and* the strongest case against it (adversarial pass).
 - **AgentVault risk firewall** — hard limits on size, daily loss, drawdown, volatility, cooldown, R:R, open positions. Returns a reasoned decision, never a silent block.
-- **Profit Guard mode** — after loss clusters or drawdown, VesperClaw pauses new entries, blocks choppy regimes, raises the confidence floor, and caps position size until conditions improve.
+- **Profit Guard mode** — after loss clusters or drawdown, VesperClaw pauses new entries, blocks choppy regimes, raises the confidence floor, caps position size, and can hard-lock new entries when drawdown/daily-loss brakes are hit.
 - **Meme Radar** — a user can search a trending meme coin ticker/name and VesperClaw returns a transparent BUY CANDIDATE / WATCH / AVOID verdict from trending status, liquidity, market cap, momentum, volatility, and current Profit Guard state. It is analysis-only and never auto-executes.
+- **World Cup prediction board** — the prediction lane now surfaces 2026 FIFA World Cup country-winner, player-prop/scorer, and match-prop markets first, so judges can inspect live sports probabilities even when the high-accuracy gate refuses to trade.
 - **Vault Saves** — when the firewall blocks/shrinks a trade, it later checks whether that block actually avoided a loss (`good_block` vs `bad_block`).
 - **Close-based, per-regime learning** — weights update only when a trade *closes*, learned independently per regime, with sample minimums, capped steps, and a weight floor so noise can't whipsaw the system.
 - **Deterministic ground truth + LLM judgment** — Python computes the entry signal (verifiable, reproducible); Qwen supplies confidence and the narrative. If the LLM is unavailable, the loop degrades to heuristics and keeps running.

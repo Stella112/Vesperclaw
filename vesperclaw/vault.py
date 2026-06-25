@@ -205,7 +205,9 @@ def _profit_guard_state(portfolio: dict[str, Any]) -> dict[str, Any]:
     drawdown = (peak - equity) / peak if peak else 0.0
     daily_loss = (day_start - equity) / day_start if day_start else 0.0
 
-    lockout = cycle < guard_until
+    hard_drawdown_lock = drawdown >= config.PROFIT_GUARD_HARD_LOCK_DRAWDOWN_PCT
+    hard_daily_lock = daily_loss >= config.PROFIT_GUARD_HARD_LOCK_DAILY_LOSS_PCT
+    lockout = cycle < guard_until or hard_drawdown_lock or hard_daily_lock
     active = (
         lockout
         or loss_streak >= config.PROFIT_GUARD_LOSS_STREAK
@@ -214,7 +216,12 @@ def _profit_guard_state(portfolio: dict[str, Any]) -> dict[str, Any]:
     )
     bits = []
     if lockout:
-        bits.append(f"profit guard lockout until cycle {guard_until}")
+        if cycle < guard_until:
+            bits.append(f"profit guard lockout until cycle {guard_until}")
+        if hard_drawdown_lock:
+            bits.append(f"hard drawdown brake {drawdown:.2%}")
+        if hard_daily_lock:
+            bits.append(f"hard daily-loss brake {daily_loss:.2%}")
     if loss_streak >= config.PROFIT_GUARD_LOSS_STREAK:
         bits.append(f"{loss_streak} consecutive losses")
     if drawdown >= config.PROFIT_GUARD_DRAWDOWN_PCT:
