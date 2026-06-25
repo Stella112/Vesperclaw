@@ -14,6 +14,7 @@ The project is not presented as a magic profit machine. Its edge is **accountabl
 | Live dashboard | http://38.49.209.149:8501/ |
 | Paper trading log | [`samples/trade_log.csv`](samples/trade_log.csv) |
 | Prediction-market paper log | [`samples/pred_trade_log.csv`](samples/pred_trade_log.csv) |
+| Optional backtest report | [`backtests/report.md`](backtests/report.md) |
 | Sample mandates and outputs | [`samples/`](samples/) |
 
 ## Why VesperClaw Exists
@@ -199,6 +200,14 @@ Prediction-market paper logs are available here:
 [`samples/pred_trade_log.csv`](samples/pred_trade_log.csv)
 
 Additional sample outputs are in [`samples/`](samples/).
+
+Supplementary backtest material is available here:
+
+- Report: [`backtests/report.md`](backtests/report.md)
+- Code: [`backtests/run_backtest.py`](backtests/run_backtest.py)
+- Raw trades: [`backtests/trades.csv`](backtests/trades.csv)
+
+The backtest is included for reproducibility, not as the main performance claim. The required submission record remains the live-paper log.
 
 ## Dashboard
 
