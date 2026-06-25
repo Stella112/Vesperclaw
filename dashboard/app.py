@@ -633,6 +633,68 @@ def judge_brief_panel(portfolio: dict, mandates: list[dict], orders: list[dict])
     )
 
 
+def alpha_gate_mandate_panel(mandates: list[dict]) -> None:
+    st.markdown("### Alpha Gate + Latest Mandate")
+    latest = mandates[-1] if mandates else {}
+    snap = latest.get("snapshot", {}) if isinstance(latest, dict) else {}
+    vault = latest.get("vault", {}) if isinstance(latest, dict) else {}
+    action = latest.get("action", "WAITING") if latest else "WAITING"
+    regime = latest.get("regime", "waiting") if latest else "waiting"
+    thesis = latest.get("thesis", "Waiting for the next loop cycle to write a mandate.") if latest else "Waiting for the next loop cycle to write a mandate."
+    counter = latest.get("counterargument", "No counterargument recorded yet.") if latest else "No counterargument recorded yet."
+    alpha_text = "PASSED" if "Alpha Gate passed" in thesis else "BLOCKING WEAK SETUPS"
+    alpha_color = "#20e3b2" if alpha_text == "PASSED" else "#ffd166"
+    direction_check = "1h trend confirmation"
+    volume_check = "volume not falling"
+    strength_check = f"ADX >= {config.MIN_TREND_ADX:g}"
+
+    left, right = st.columns([1, 1.45])
+    with left:
+        st.markdown(
+            f"""
+            <div class="vc-panel">
+                <h3>{badge(f"ALPHA GATE {alpha_text}", alpha_color)}</h3>
+                <p>
+                    This is the quality filter before AgentVault. It blocks choppy or weak
+                    crypto trades unless trend, strength, volume, and higher-timeframe direction agree.
+                </p>
+                <div class="vc-ledger-stat">
+                    <div class="vc-mini"><span>Trend</span><strong>{safe_text(regime)}</strong></div>
+                    <div class="vc-mini"><span>HTF Rule</span><strong>{safe_text(direction_check)}</strong></div>
+                    <div class="vc-mini"><span>Strength</span><strong>{safe_text(strength_check)}</strong></div>
+                </div>
+                <div class="vc-ledger-stat">
+                    <div class="vc-mini"><span>Volume</span><strong>{safe_text(volume_check)}</strong></div>
+                    <div class="vc-mini"><span>RSI Guard</span><strong>avoid overextension</strong></div>
+                    <div class="vc-mini"><span>SOL</span><strong>still in basket</strong></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with right:
+        st.markdown(
+            f"""
+            <div class="vc-panel">
+                <h3>
+                    {badge("LATEST MANDATE", "#22d3ee")}
+                    {badge(action, ACTION_COLORS.get(action, "#8b98b8"))}
+                    {badge(vault.get("decision", "VAULT IDLE"), VAULT_COLORS.get(vault.get("decision"), "#8b98b8"))}
+                </h3>
+                <p><strong>ID:</strong> {safe_text(latest.get('mandate_id', 'waiting'))}</p>
+                <p><strong>Symbol:</strong> {safe_text(latest.get('symbol', 'waiting'))}
+                | <strong>Confidence:</strong> {safe_text(latest.get('confidence', 'n/a'))}
+                | <strong>Price:</strong> {safe_text(snap.get('price', 'n/a'))}</p>
+                <div class="vc-rule"></div>
+                <p><strong>Thesis:</strong> {safe_text(thesis)}</p>
+                <p><strong>Counterargument:</strong> {safe_text(counter)}</p>
+                <p><strong>Vault reason:</strong> {safe_text(vault.get('reason', 'No vault decision recorded yet.'))}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def profit_guard_panel(portfolio: dict) -> None:
     guard = profit_guard_summary(portfolio)
     color = "#ff5470" if guard["lockout"] else "#ffd166" if guard["active"] else "#20e3b2"
@@ -855,6 +917,9 @@ def agent_hub_panel() -> None:
             data = agent_hub.write_status()
         except Exception:  # noqa: BLE001
             data = {}
+    live_creds = agent_hub.credential_status()
+    if isinstance(data, dict):
+        data["credentials"] = live_creds
     cli = data.get("cli", {}) if isinstance(data, dict) else {}
     creds = data.get("credentials", {}) if isinstance(data, dict) else {}
     skills = data.get("skills", []) if isinstance(data, dict) else []
@@ -872,7 +937,7 @@ def agent_hub_panel() -> None:
             </p>
             <div class="vc-ledger-stat">
                 <div class="vc-mini"><span>CLI</span><strong>{safe_text(cli.get('version', 'not detected'))}</strong></div>
-                <div class="vc-mini"><span>API Keys</span><strong>{'ready' if creds.get('read_ready') else 'not set'}</strong></div>
+                <div class="vc-mini"><span>API Keys</span><strong>{'ready (read-only)' if creds.get('read_ready') else 'not set'}</strong></div>
                 <div class="vc-mini"><span>Skills</span><strong>{len(skills)}/5 lanes</strong></div>
             </div>
         </div>
@@ -1669,6 +1734,9 @@ def main() -> None:
     st.write("")
     kpi_strip(portfolio)
     st.write("")
+    alpha_gate_mandate_panel(mandates)
+
+    st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
     judge_brief_panel(portfolio, mandates, orders)
 
     st.markdown('<div class="vc-rule"></div>', unsafe_allow_html=True)
